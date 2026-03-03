@@ -71,14 +71,29 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">邮箱类型</label>
+                    <select class="form-select" id="accountProvider" onchange="onProviderChange(this.value)">
+                        <option value="outlook">Outlook</option>
+                    </select>
+                    <div class="form-hint">提示：QQ/网易/Gmail 等请使用授权码/应用专用密码（非网页登录密码）</div>
+                </div>
+                <div class="form-group" id="customImapFields" style="display:none;">
+                    <label class="form-label">自定义 IMAP 配置</label>
+                    <input type="text" class="form-input" id="imapHost" placeholder="imap.example.com">
+                    <div style="height: 8px;"></div>
+                    <input type="number" class="form-input" id="imapPort" placeholder="993" value="993" min="1" max="65535">
+                    <div class="form-hint">仅自定义 IMAP 需要填写；端口通常为 993（SSL）</div>
+                </div>
+                <div class="form-group">
                     <label class="form-label">账号信息</label>
                     <textarea class="form-textarea" id="accountInput"
                         placeholder="邮箱----密码----client_id----refresh_token"></textarea>
-                    <div class="form-hint">格式：邮箱----密码----client_id----refresh_token，支持批量导入（每行一个）</div>
+                    <div class="form-hint" id="accountFormatHint">格式：邮箱----密码----client_id----refresh_token，支持批量导入（每行一个）</div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="hideAddAccountModal()">取消</button>
+                <button class="btn btn-primary" id="getRefreshTokenBtnInAdd" onclick="showGetRefreshTokenModal()" style="background-color: #0078d4;">🔑 获取 Token</button>
                 <button class="btn btn-primary" onclick="addAccount()">导入</button>
             </div>
         </div>
@@ -93,19 +108,20 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="editAccountId">
+                <input type="hidden" id="editAccountType">
                 <div class="form-group">
                     <label class="form-label">邮箱地址</label>
                     <input type="text" class="form-input" id="editEmail" placeholder="example@outlook.com">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">密码</label>
-                    <input type="text" class="form-input" id="editPassword" placeholder="可选">
+                    <label class="form-label" id="editPasswordLabel">密码</label>
+                    <input type="text" class="form-input" id="editPassword" placeholder="可选，留空则不修改">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="editClientIdGroup">
                     <label class="form-label">Client ID</label>
                     <input type="text" class="form-input" id="editClientId">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="editRefreshTokenGroup">
                     <label class="form-label">Refresh Token</label>
                     <textarea class="form-textarea" id="editRefreshToken" style="height: 80px;"></textarea>
                 </div>

@@ -75,6 +75,11 @@ def load_accounts(group_id: int = None) -> List[Dict]:
                 account["refresh_token"] = decrypt_data(account["refresh_token"])
             except Exception:
                 pass
+        if account.get("imap_password"):
+            try:
+                account["imap_password"] = decrypt_data(account["imap_password"])
+            except Exception:
+                pass
 
         account_id_value = account.get("id")
         try:
@@ -109,6 +114,11 @@ def get_account_by_email(email_addr: str) -> Optional[Dict]:
             account["refresh_token"] = decrypt_data(account["refresh_token"])
         except Exception:
             pass
+    if account.get("imap_password"):
+        try:
+            account["imap_password"] = decrypt_data(account["imap_password"])
+        except Exception:
+            pass
     return account
 
 
@@ -138,6 +148,11 @@ def get_account_by_id(account_id: int) -> Optional[Dict]:
             account["refresh_token"] = decrypt_data(account["refresh_token"])
         except Exception:
             pass
+    if account.get("imap_password"):
+        try:
+            account["imap_password"] = decrypt_data(account["imap_password"])
+        except Exception:
+            pass
     return account
 
 
@@ -148,27 +163,59 @@ def add_account(
     refresh_token: str,
     group_id: int = 1,
     remark: str = "",
+    account_type: str = "outlook",
+    provider: str = "outlook",
+    imap_host: str = "",
+    imap_port: int = 993,
+    imap_password: str = "",
     db: Optional[sqlite3.Connection] = None,
     commit: bool = True,
 ) -> bool:
     """添加邮箱账号（支持外部事务批量导入）"""
     db = db or get_db()
     try:
+        account_type = (account_type or "outlook").strip().lower()
+        provider = (provider or ("outlook" if account_type != "imap" else "custom")).strip().lower()
+
+        # PRD-00005 / TDD-00005：
+        # - Outlook：必须提供 client_id/refresh_token（OAuth2）
+        # - IMAP：必须提供 imap_password；client_id/refresh_token 在 DB 中使用空字符串占位（保持 NOT NULL 约束）
+        if account_type == "imap":
+            if not (imap_password or "").strip():
+                return False
+            if provider == "custom" and not (imap_host or "").strip():
+                return False
+        else:
+            if not (client_id or "").strip() or not (refresh_token or "").strip():
+                return False
+
         encrypted_password = encrypt_data(password) if password else password
         encrypted_refresh_token = (
             encrypt_data(refresh_token) if refresh_token else refresh_token
         )
+        encrypted_imap_password = (
+            encrypt_data(imap_password) if imap_password else imap_password
+        )
 
         db.execute(
             """
-            INSERT INTO accounts (email, password, client_id, refresh_token, group_id, remark)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO accounts (
+                email, password, client_id, refresh_token,
+                account_type, provider, imap_host, imap_port, imap_password,
+                group_id, remark
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 email_addr,
                 encrypted_password,
-                client_id,
+                client_id or "",
                 encrypted_refresh_token,
+                account_type,
+                provider,
+                imap_host or "",
+                int(imap_port) if imap_port else 993,
+                encrypted_imap_password,
                 group_id,
                 remark,
             ),
@@ -197,7 +244,7 @@ def update_account(
     try:
         existing = db.execute(
             """
-            SELECT password, client_id, refresh_token
+            SELECT password, client_id, refresh_token, account_type, imap_password
             FROM accounts
             WHERE id = ?
             """,
@@ -205,6 +252,41 @@ def update_account(
         ).fetchone()
         if not existing:
             return False
+
+        account_type = (existing["account_type"] or "outlook").strip().lower()
+
+        # PRD-00005 / TDD-00005：IMAP 账号不要求 client_id/refresh_token（DB 约束使用空字符串占位）
+        # 允许更新：email/group/remark/status；如用户在 UI 的“密码”栏输入内容，则视为更新 imap_password。
+        if account_type == "imap":
+            encrypted_imap_password = existing["imap_password"]
+            if isinstance(password, str) and password.strip():
+                encrypted_imap_password = encrypt_data(password)
+
+            if not email_addr:
+                return False
+
+            db.execute(
+                """
+                UPDATE accounts
+                SET email = ?,
+                    imap_password = ?,
+                    group_id = ?,
+                    remark = ?,
+                    status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    email_addr,
+                    encrypted_imap_password,
+                    group_id,
+                    remark,
+                    status,
+                    account_id,
+                ),
+            )
+            db.commit()
+            return True
 
         new_client_id = (
             client_id.strip()

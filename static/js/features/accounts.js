@@ -66,6 +66,67 @@
             document.getElementById('emailDetailToolbar').style.display = 'none';
         }
 
+        // Provider 下拉缓存
+        let providersLoaded = false;
+        let providerOptions = [];
+
+        // 加载邮箱 providers（用于导入下拉）
+        async function loadProviders() {
+            if (providersLoaded) return;
+
+            const select = document.getElementById('accountProvider');
+            if (!select) return;
+
+            try {
+                const resp = await fetch('/api/providers');
+                const data = await resp.json();
+                if (!data.success || !Array.isArray(data.providers)) return;
+
+                providerOptions = data.providers;
+                select.innerHTML = data.providers.map(p => `
+                    <option value="${escapeHtml(p.key)}">${escapeHtml(p.label || p.key)}</option>
+                `).join('');
+
+                providersLoaded = true;
+            } catch (e) {
+                // 静默失败：保留默认 Outlook 选项
+            }
+        }
+
+        // Provider 切换：更新 placeholder / hint / custom IMAP 配置区显示
+        function onProviderChange(provider) {
+            const p = (provider || 'outlook').toLowerCase();
+            const input = document.getElementById('accountInput');
+            const hint = document.getElementById('accountFormatHint');
+            const customFields = document.getElementById('customImapFields');
+            const getTokenBtn = document.getElementById('getRefreshTokenBtnInAdd');
+
+            if (!input || !hint || !customFields) return;
+
+            // "获取Token"按钮仅 Outlook 类型可见
+            if (getTokenBtn) {
+                getTokenBtn.style.display = (p === 'outlook') ? '' : 'none';
+            }
+
+            if (p === 'outlook') {
+                customFields.style.display = 'none';
+                input.placeholder = '邮箱----密码----client_id----refresh_token';
+                hint.textContent = '格式：邮箱----密码----client_id----refresh_token，支持批量导入（每行一个）';
+                return;
+            }
+
+            if (p === 'custom') {
+                customFields.style.display = '';
+                input.placeholder = '邮箱----IMAP授权码/应用密码';
+                hint.textContent = '格式：邮箱----IMAP授权码/应用密码（每行一个）。自定义 IMAP 需填写上方服务器/端口；也支持：邮箱----授权码----imap_host----imap_port';
+                return;
+            }
+
+            customFields.style.display = 'none';
+            input.placeholder = '邮箱----IMAP授权码/应用密码';
+            hint.textContent = '格式：邮箱----IMAP授权码/应用密码，支持批量导入（每行一个）';
+        }
+
         // 显示添加账号模态框
         function showAddAccountModal() {
             document.getElementById('accountInput').value = '';
@@ -73,6 +134,21 @@
             if (currentGroupId) {
                 document.getElementById('importGroupSelect').value = currentGroupId;
             }
+            // 加载 providers 并初始化默认状态
+            loadProviders().finally(() => {
+                const sel = document.getElementById('accountProvider');
+                if (sel) {
+                    sel.value = 'outlook';
+                    onProviderChange('outlook');
+                } else {
+                    onProviderChange('outlook');
+                }
+
+                const hostEl = document.getElementById('imapHost');
+                const portEl = document.getElementById('imapPort');
+                if (hostEl) hostEl.value = '';
+                if (portEl) portEl.value = '993';
+            });
             document.getElementById('addAccountModal').classList.add('show');
         }
 
@@ -85,6 +161,8 @@
         async function addAccount() {
             const input = document.getElementById('accountInput').value.trim();
             const groupId = parseInt(document.getElementById('importGroupSelect').value);
+            const providerEl = document.getElementById('accountProvider');
+            const provider = providerEl ? (providerEl.value || 'outlook') : 'outlook';
 
             if (!input) {
                 showToast('请输入账号信息', 'error');
@@ -92,10 +170,33 @@
             }
 
             try {
+                const payload = { account_string: input, group_id: groupId };
+                if (provider && provider !== 'outlook') {
+                    payload.provider = provider;
+                    if (provider === 'custom') {
+                        const host = (document.getElementById('imapHost')?.value || '').trim();
+                        const portRaw = (document.getElementById('imapPort')?.value || '').trim();
+                        const port = parseInt(portRaw || '993', 10) || 993;
+
+                        if (!host) {
+                            // 允许每行内嵌 host/port：email----授权码----imap_host----imap_port（或导出格式 5 段）
+                            const lines = input.split('\n').map(l => (l || '').trim()).filter(l => l && !l.startsWith('#'));
+                            const hasInlineHost = lines.some(l => (l.split('----').length >= 4));
+                            if (!hasInlineHost) {
+                                showToast('请填写 IMAP 服务器地址（或在文本中每行包含 host/port）', 'error');
+                                return;
+                            }
+                        } else {
+                            payload.imap_host = host;
+                            payload.imap_port = port;
+                        }
+                    }
+                }
+
                 const response = await fetch('/api/accounts', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ account_string: input, group_id: groupId })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
@@ -130,7 +231,10 @@
 
                 if (data.success) {
                     const acc = data.account;
+                    const isImap = (acc.account_type || 'outlook') === 'imap';
+
                     document.getElementById('editAccountId').value = acc.id;
+                    document.getElementById('editAccountType').value = acc.account_type || 'outlook';
                     document.getElementById('editEmail').value = acc.email;
                     document.getElementById('editPassword').value = acc.password || '';
                     document.getElementById('editClientId').value = acc.client_id;
@@ -138,6 +242,24 @@
                     document.getElementById('editGroupSelect').value = acc.group_id || 1;
                     document.getElementById('editRemark').value = acc.remark || '';
                     document.getElementById('editStatus').value = acc.status || 'active';
+
+                    // IMAP 账号：隐藏 Client ID / Refresh Token，调整密码标签
+                    const clientIdGroup = document.getElementById('editClientIdGroup');
+                    const refreshTokenGroup = document.getElementById('editRefreshTokenGroup');
+                    const passwordLabel = document.getElementById('editPasswordLabel');
+
+                    if (isImap) {
+                        clientIdGroup.style.display = 'none';
+                        refreshTokenGroup.style.display = 'none';
+                        passwordLabel.textContent = '授权码 / 应用密码';
+                        document.getElementById('editPassword').placeholder = '留空则不修改';
+                    } else {
+                        clientIdGroup.style.display = '';
+                        refreshTokenGroup.style.display = '';
+                        passwordLabel.textContent = '密码';
+                        document.getElementById('editPassword').placeholder = '可选，留空则不修改';
+                    }
+
                     document.getElementById('editAccountModal').classList.add('show');
                 }
             } catch (error) {
@@ -153,6 +275,8 @@
         // 更新账号
         async function updateAccount() {
             const accountId = document.getElementById('editAccountId').value;
+            const accountType = document.getElementById('editAccountType').value || 'outlook';
+            const isImap = accountType === 'imap';
             const oldGroupId = currentGroupId;
             const newGroupId = parseInt(document.getElementById('editGroupSelect').value);
 
@@ -166,7 +290,13 @@
                 status: document.getElementById('editStatus').value
             };
 
-            if (!data.email || !data.client_id || !data.refresh_token) {
+            if (!data.email) {
+                showToast('邮箱地址不能为空', 'error');
+                return;
+            }
+
+            // Outlook 账号需要 Client ID 和 Refresh Token
+            if (!isImap && (!data.client_id || !data.refresh_token)) {
                 showToast('邮箱、Client ID 和 Refresh Token 不能为空', 'error');
                 return;
             }

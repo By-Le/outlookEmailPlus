@@ -95,6 +95,19 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         # DB teardown（请求结束释放连接）
         register_db(app)
 
+        # 配置日志（确保 outlook_web 命名空间的日志输出到 stderr）
+        import logging
+        import sys
+
+        _log_handler = logging.StreamHandler(sys.stderr)
+        _log_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+        )
+        _ow_logger = logging.getLogger("outlook_web")
+        if not _ow_logger.handlers:
+            _ow_logger.addHandler(_log_handler)
+            _ow_logger.setLevel(logging.INFO)
+
         # CSRF（可选）
         _csrf, csrf_exempt, _generate_csrf = init_csrf(app)
 

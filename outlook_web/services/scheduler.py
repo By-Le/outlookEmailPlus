@@ -264,8 +264,14 @@ def scheduled_refresh_task(app, test_refresh_token):
         except Exception:
             pass
 
+        # PRD-00005 / TDD-00005：定时刷新只处理 Outlook 账号（IMAP 账号无 OAuth token 刷新语义）
         accounts = conn.execute(
-            "SELECT id, email, client_id, refresh_token, group_id FROM accounts WHERE status = 'active'"
+            """
+            SELECT id, email, client_id, refresh_token, group_id
+            FROM accounts
+            WHERE status = 'active'
+              AND (account_type = 'outlook' OR account_type IS NULL)
+            """
         ).fetchall()
         total = len(accounts)
 

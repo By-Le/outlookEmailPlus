@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from flask import jsonify, request
@@ -14,6 +15,9 @@ from outlook_web.security.auth import login_required
 from outlook_web.services import email_delete as email_delete_service
 from outlook_web.services import graph as graph_service
 from outlook_web.services import imap as imap_service
+from outlook_web.services.imap_generic import get_email_detail_imap_generic, get_emails_imap_generic
+
+_LOGGER = logging.getLogger("outlook_web.controllers.emails")
 
 # IMAP 服务器配置
 IMAP_SERVER_OLD = "outlook.office365.com"
@@ -41,6 +45,21 @@ def api_get_emails(email_addr: str) -> Any:
     folder = request.args.get("folder", "inbox")  # inbox, junkemail, deleteditems
     skip = int(request.args.get("skip", 0))
     top = int(request.args.get("top", 20))
+
+    # PRD-00005 / FD-00005 / TDD-00005：按 account_type 路由分发（Outlook 链路保持原样，IMAP 走通用 IMAP 服务）
+    account_type = (account.get("account_type") or "outlook").strip().lower()
+    if account_type == "imap":
+        result = get_emails_imap_generic(
+            email_addr=email_addr,
+            imap_password=account.get("imap_password", "") or "",
+            imap_host=account.get("imap_host", "") or "",
+            imap_port=account.get("imap_port", 993) or 993,
+            folder=folder,
+            provider=account.get("provider", "_default") or "_default",
+            skip=skip,
+            top=top,
+        )
+        return jsonify(result)
 
     # 获取分组代理设置
     proxy_url = ""
@@ -178,6 +197,18 @@ def api_delete_emails() -> Any:
     if not account:
         return jsonify({"success": False, "error": "账号不存在"})
 
+    # PRD-00005：IMAP 账号不支持远程删除（避免误操作与跨厂商副作用）
+    account_type = (account.get("account_type") or "outlook").strip().lower()
+    if account_type == "imap":
+        error_payload = build_error_payload(
+            "IMAP_DELETE_NOT_SUPPORTED",
+            "IMAP 邮箱不支持远程删除，请在邮箱客户端中操作",
+            "NotSupportedError",
+            400,
+            f"email={email_addr}",
+        )
+        return jsonify({"success": False, "error": error_payload}), 400
+
     # 获取分组代理设置
     proxy_url = ""
     if account.get("group_id"):
@@ -219,13 +250,34 @@ def api_delete_emails() -> Any:
 @login_required
 def api_get_email_detail(email_addr: str, message_id: str) -> Any:
     """获取邮件详情"""
+    _LOGGER.info("email_detail_request email=%s message_id=%s", email_addr, message_id)
     account = accounts_repo.get_account_by_email(email_addr)
 
     if not account:
+        _LOGGER.warning("email_detail_account_not_found email=%s", email_addr)
         return jsonify({"success": False, "error": "账号不存在"})
 
-    method = request.args.get("method", "graph")
+    account_type = (account.get("account_type") or "outlook").strip().lower()
     folder = request.args.get("folder", "inbox")
+    _LOGGER.info("email_detail_type=%s provider=%s folder=%s", account_type, account.get("provider", "N/A"), folder)
+
+    if account_type == "imap":
+        detail = get_email_detail_imap_generic(
+            email_addr=email_addr,
+            imap_password=account.get("imap_password", "") or "",
+            imap_host=account.get("imap_host", "") or "",
+            imap_port=account.get("imap_port", 993) or 993,
+            message_id=message_id,
+            folder=folder,
+            provider=account.get("provider", "_default") or "_default",
+        )
+        if detail:
+            _LOGGER.info("email_detail_imap_ok email=%s subject=%s", email_addr, detail.get("subject", "?")[:40])
+            return jsonify({"success": True, "email": detail})
+        _LOGGER.warning("email_detail_imap_failed email=%s message_id=%s", email_addr, message_id)
+        return jsonify({"success": False, "error": "获取邮件详情失败"})
+
+    method = request.args.get("method", "graph")
 
     if method == "graph":
         # 获取分组代理设置
@@ -308,6 +360,88 @@ def api_extract_verification(email_addr: str) -> Any:
             f"email={email_addr}",
         )
         return jsonify({"success": False, "error": error_payload}), 404
+
+    # PRD-00005：IMAP 账号验证码提取走 IMAP（Generic）→ 详情 → extractor；Outlook 保持原 Graph→IMAP XOAUTH2 回退链
+    account_type = (account.get("account_type") or "outlook").strip().lower()
+    if account_type == "imap":
+        emails_result = get_emails_imap_generic(
+            email_addr=email_addr,
+            imap_password=account.get("imap_password", "") or "",
+            imap_host=account.get("imap_host", "") or "",
+            imap_port=account.get("imap_port", 993) or 993,
+            folder="inbox",
+            provider=account.get("provider", "_default") or "_default",
+            skip=0,
+            top=1,
+        )
+
+        if not emails_result.get("success"):
+            error_payload = build_error_payload(
+                "EMAIL_FETCH_FAILED",
+                "获取邮件失败",
+                "IMAPError",
+                500,
+                emails_result,
+            )
+            return jsonify({"success": False, "error": error_payload}), 500
+
+        emails = emails_result.get("emails") or []
+        if not emails:
+            error_payload = build_error_payload(
+                "EMAIL_NOT_FOUND",
+                "未找到邮件",
+                "NotFoundError",
+                404,
+                f"email={email_addr}",
+            )
+            return jsonify({"success": False, "error": error_payload}), 404
+
+        latest_email = emails[0]
+        detail = get_email_detail_imap_generic(
+            email_addr=email_addr,
+            imap_password=account.get("imap_password", "") or "",
+            imap_host=account.get("imap_host", "") or "",
+            imap_port=account.get("imap_port", 993) or 993,
+            message_id=latest_email.get("id") or "",
+            folder="inbox",
+            provider=account.get("provider", "_default") or "_default",
+        )
+
+        if not detail:
+            error_payload = build_error_payload(
+                "EMAIL_DETAIL_NOT_FOUND",
+                "获取邮件详情失败",
+                "NotFoundError",
+                404,
+                f"email={email_addr}",
+            )
+            return jsonify({"success": False, "error": error_payload}), 404
+
+        # 构建邮件对象用于提取（避免把 HTML 放进 body 导致 extractor 不走 HTML->text）
+        email_obj = {
+            "subject": detail.get("subject", ""),
+            "body": detail.get("body_text", ""),
+            "body_html": detail.get("body_html", ""),
+            "body_preview": latest_email.get("body_preview", ""),
+        }
+
+        try:
+            result = extract_verification_info(email_obj)
+            return jsonify({"success": True, "data": result, "message": "提取成功"})
+        except ValueError as e:
+            error_payload = build_error_payload(
+                "VERIFICATION_NOT_FOUND",
+                str(e),
+                "NotFoundError",
+                404,
+                f"email={email_addr}",
+            )
+            return jsonify({"success": False, "error": error_payload}), 404
+        except Exception as e:
+            error_payload = build_error_payload(
+                "EXTRACT_ERROR", "提取失败", "ExtractError", 500, str(e)
+            )
+            return jsonify({"success": False, "error": error_payload}), 500
 
     # 获取分组代理设置
     proxy_url = ""

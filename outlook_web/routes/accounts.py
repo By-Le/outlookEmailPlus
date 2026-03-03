@@ -16,6 +16,11 @@ def create_blueprint() -> Blueprint:
         "/api/accounts", view_func=accounts_controller.api_add_account, methods=["POST"]
     )
     bp.add_url_rule(
+        "/api/providers",
+        view_func=accounts_controller.api_get_providers,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
         "/api/accounts/<int:account_id>",
         view_func=accounts_controller.api_get_account,
         methods=["GET"],

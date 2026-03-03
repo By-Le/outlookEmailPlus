@@ -109,6 +109,8 @@ def api_get_accounts() -> Any:
             {
                 "id": acc["id"],
                 "email": acc["email"],
+                "account_type": acc.get("account_type") or "outlook",
+                "provider": acc.get("provider") or "outlook",
                 "client_id": (
                     acc["client_id"][:8] + "..."
                     if len(acc["client_id"]) > 8
@@ -157,6 +159,8 @@ def api_get_account(account_id: int) -> Any:
                 "group_name": account.get("group_name", "默认分组"),
                 "remark": account.get("remark", ""),
                 "status": account.get("status", "active"),
+                "account_type": account.get("account_type") or "outlook",
+                "provider": account.get("provider") or "outlook",
                 "created_at": account.get("created_at", ""),
                 "updated_at": account.get("updated_at", ""),
             },
@@ -167,9 +171,12 @@ def api_get_account(account_id: int) -> Any:
 @login_required
 def api_add_account() -> Any:
     """添加账号"""
-    data = request.json
+    data = request.json or {}
     account_str = data.get("account_string", "")
     group_id = data.get("group_id", 1)
+    provider = (data.get("provider") or "outlook").strip().lower()
+    custom_imap_host = (data.get("imap_host") or "").strip()
+    custom_imap_port = data.get("imap_port")
 
     if not account_str:
         return jsonify({"success": False, "error": "请输入账号信息"})
@@ -206,6 +213,9 @@ def api_add_account() -> Any:
             }
         return None
 
+    def is_comment_line(line: str) -> bool:
+        return bool(line) and line.lstrip().startswith("#")
+
     # 支持批量导入（多行）+ 逐行校验与错误定位
     raw_lines = account_str.splitlines()
     imported = 0
@@ -215,9 +225,202 @@ def api_add_account() -> Any:
     max_error_details = 50
 
     db = get_db()
+
+    # -------------------- IMAP provider 导入分支 --------------------
+    # 对齐：PRD-00005 / FD-00005 / TDD-00005
+    # 约束：不改动 Outlook 旧格式；IMAP 账号使用 client_id/refresh_token 空字符串占位（DB NOT NULL 约束不变）。
+    if provider and provider != "outlook":
+        from outlook_web.services.providers import MAIL_PROVIDERS
+
+        provider_cfg = MAIL_PROVIDERS.get(provider, {})
+        default_imap_host = (provider_cfg.get("imap_host") or "").strip()
+        default_imap_port = int(provider_cfg.get("imap_port") or 993)
+
+        # custom 可从 request body 提供全局 host/port（兼容前端“自定义 IMAP 配置”输入）
+        if provider == "custom":
+            if custom_imap_port is None or str(custom_imap_port).strip() == "":
+                custom_port_val = 993
+            else:
+                try:
+                    custom_port_val = int(str(custom_imap_port).strip())
+                except Exception:
+                    custom_port_val = 993
+        else:
+            custom_port_val = None
+
+        for line_no, raw in enumerate(raw_lines, start=1):
+            line = (raw or "").strip()
+            if not line or is_comment_line(line):
+                continue
+
+            parts = [p.strip() for p in line.split("----")]
+            email_addr = sanitize_credential_field(parts[0] if len(parts) > 0 else "", 320)
+            imap_pwd = sanitize_credential_field(parts[1] if len(parts) > 1 else "", 500)
+
+            if len(parts) < 2 or not email_addr or not imap_pwd:
+                failed += 1
+                errors_total += 1
+                if len(errors) < max_error_details:
+                    errors.append(
+                        {
+                            "line": line_no,
+                            "email": email_addr,
+                            "error": "格式错误，应为：邮箱----IMAP授权码/应用密码（custom 可包含 host/port）",
+                        }
+                    )
+                continue
+
+            # 基础邮箱格式校验
+            if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email_addr):
+                failed += 1
+                errors_total += 1
+                if len(errors) < max_error_details:
+                    errors.append(
+                        {"line": line_no, "email": email_addr, "error": "邮箱格式不正确"}
+                    )
+                continue
+
+            imap_host = default_imap_host
+            imap_port = default_imap_port
+
+            if provider == "custom":
+                # 兼容两类输入：
+                # 1) 5 段（导出格式）：email----imap_password----custom----imap_host----imap_port
+                # 2) 4 段（文本批量）：email----imap_password----imap_host----imap_port
+                # 3) 2 段（配合输入框）：email----imap_password（host/port 从 request body 取）
+                if len(parts) >= 5 and (parts[2] or "").strip().lower() == "custom":
+                    imap_host = (parts[3] or "").strip()
+                    try:
+                        imap_port = int((parts[4] or "").strip() or 993)
+                    except Exception:
+                        imap_port = 993
+                elif len(parts) >= 4:
+                    imap_host = (parts[2] or "").strip()
+                    try:
+                        imap_port = int((parts[3] or "").strip() or 993)
+                    except Exception:
+                        imap_port = 993
+                else:
+                    imap_host = custom_imap_host
+                    imap_port = custom_port_val if custom_port_val is not None else 993
+
+                if not imap_host:
+                    failed += 1
+                    errors_total += 1
+                    if len(errors) < max_error_details:
+                        errors.append(
+                            {
+                                "line": line_no,
+                                "email": email_addr,
+                                "error": "自定义 IMAP 必须提供服务器地址（imap_host）",
+                            }
+                        )
+                    continue
+            else:
+                # 兼容导出格式：email----imap_password----provider
+                if len(parts) >= 3:
+                    line_provider = (parts[2] or "").strip().lower()
+                    if line_provider and line_provider != provider:
+                        # 明确不一致：提示用户切换 provider 或修正文本
+                        failed += 1
+                        errors_total += 1
+                        if len(errors) < max_error_details:
+                            errors.append(
+                                {
+                                    "line": line_no,
+                                    "email": email_addr,
+                                    "error": f"provider 不匹配：当前选择 {provider}，文本为 {line_provider}",
+                                }
+                            )
+                        continue
+
+                if not imap_host:
+                    failed += 1
+                    errors_total += 1
+                    if len(errors) < max_error_details:
+                        errors.append(
+                            {
+                                "line": line_no,
+                                "email": email_addr,
+                                "error": "未找到该 provider 的默认 IMAP 配置，请使用自定义 IMAP",
+                            }
+                        )
+                    continue
+
+            ok = accounts_repo.add_account(
+                email_addr,
+                password="",
+                client_id="",
+                refresh_token="",
+                group_id=group_id,
+                remark="",
+                account_type="imap",
+                provider=provider,
+                imap_host=imap_host,
+                imap_port=imap_port,
+                imap_password=imap_pwd,
+                db=db,
+                commit=False,
+            )
+            if ok:
+                imported += 1
+                continue
+
+            failed += 1
+            errors_total += 1
+            reason = "写入失败"
+            try:
+                exists = db.execute(
+                    "SELECT 1 FROM accounts WHERE email = ? LIMIT 1", (email_addr,)
+                ).fetchone()
+                if exists:
+                    reason = "邮箱已存在"
+            except Exception:
+                pass
+            if len(errors) < max_error_details:
+                errors.append({"line": line_no, "email": email_addr, "error": reason})
+
+        summary = {
+            "group_id": group_id,
+            "total_lines": len(raw_lines),
+            "imported": imported,
+            "failed": failed,
+            "errors_total": errors_total,
+            "errors_returned": len(errors),
+            "errors_truncated": errors_total > len(errors),
+        }
+
+        message = f"导入完成：成功 {imported} 个，失败 {failed} 个"
+
+        if imported > 0:
+            try:
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                return jsonify({"success": False, "error": "数据库写入失败，请重试"})
+            log_audit(
+                "import",
+                "account",
+                None,
+                f"{message}，目标分组ID={group_id}，provider={provider}",
+            )
+            return jsonify(
+                {"success": True, "message": message, "summary": summary, "errors": errors}
+            )
+
+        return jsonify(
+            {"success": False, "error": message, "summary": summary, "errors": errors}
+        )
+
+    # -------------------- Outlook（旧格式）导入分支：保持现有逻辑完全不动 --------------------
     for line_no, raw in enumerate(raw_lines, start=1):
         line = (raw or "").strip()
         if not line:
+            continue
+        if is_comment_line(line):
             continue
 
         parsed = parse_account_string(line)
@@ -317,6 +520,14 @@ def api_add_account() -> Any:
     return jsonify(
         {"success": False, "error": message, "summary": summary, "errors": errors}
     )
+
+
+@login_required
+def api_get_providers() -> Any:
+    """返回邮箱提供商列表，用于前端下拉选择（PRD-00005 / TDD-00005）"""
+    from outlook_web.services.providers import get_provider_list
+
+    return jsonify({"success": True, "providers": get_provider_list()})
 
 
 @login_required
@@ -688,6 +899,8 @@ def api_search_accounts() -> Any:
             {
                 "id": acc["id"],
                 "email": acc["email"],
+                "account_type": acc.get("account_type") or "outlook",
+                "provider": acc.get("provider") or "outlook",
                 "client_id": (
                     acc["client_id"][:8] + "..."
                     if len(acc["client_id"]) > 8
@@ -714,6 +927,59 @@ def api_search_accounts() -> Any:
 
 
 # ==================== 导出功能 API ====================
+
+def _build_export_text(accounts: List[Dict[str, Any]]) -> str:
+    from outlook_web.services.providers import MAIL_PROVIDERS, get_provider_list
+
+    outlook_lines: List[str] = []
+    imap_groups: Dict[str, List[str]] = {}
+
+    for acc in accounts or []:
+        atype = (acc.get("account_type") or "outlook").strip().lower()
+        if atype == "outlook":
+            line = f"{acc.get('email','')}----{acc.get('password','')}----{acc.get('client_id','')}----{acc.get('refresh_token','')}"
+            outlook_lines.append(line)
+            continue
+
+        provider = (acc.get("provider") or "custom").strip().lower()
+        imap_pwd = acc.get("imap_password", "") or ""
+        if provider == "custom":
+            line = f"{acc.get('email','')}----{imap_pwd}----{provider}----{acc.get('imap_host','') or ''}----{acc.get('imap_port', 993) or 993}"
+        else:
+            line = f"{acc.get('email','')}----{imap_pwd}----{provider}"
+
+        imap_groups.setdefault(provider, []).append(line)
+
+    parts: List[str] = []
+    if outlook_lines:
+        parts.append("# === Outlook 账号 ===")
+        parts.extend(outlook_lines)
+
+    provider_order = [p.get("key") for p in get_provider_list() if p.get("key")]
+    provider_order = [p for p in provider_order if p != "outlook"]
+
+    appended = set()
+    for provider in provider_order:
+        lines = imap_groups.get(provider) or []
+        if not lines:
+            continue
+        label = (MAIL_PROVIDERS.get(provider, {}) or {}).get("label", provider)
+        if parts:
+            parts.append("")
+        parts.append(f"# === IMAP 账号（{label}）===")
+        parts.extend(lines)
+        appended.add(provider)
+
+    for provider, lines in imap_groups.items():
+        if provider in appended:
+            continue
+        label = (MAIL_PROVIDERS.get(provider, {}) or {}).get("label", provider)
+        if parts:
+            parts.append("")
+        parts.append(f"# === IMAP 账号（{label}）===")
+        parts.extend(lines)
+
+    return "\n".join(parts).strip() + "\n"
 
 
 @login_required
@@ -746,13 +1012,7 @@ def api_export_all_accounts() -> Any:
     # 记录审计日志
     log_audit("export", "all_accounts", None, f"导出所有账号，共 {len(accounts)} 个")
 
-    # 生成导出内容（格式：email----password----client_id----refresh_token）
-    lines = []
-    for acc in accounts:
-        line = f"{acc['email']}----{acc.get('password', '')}----{acc['client_id']}----{acc['refresh_token']}"
-        lines.append(line)
-
-    content = "\n".join(lines)
+    content = _build_export_text(accounts)
 
     # 生成文件名（使用 URL 编码处理中文）
     filename = f"all_accounts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
@@ -777,9 +1037,9 @@ def api_export_selected_accounts() -> Any:
         get_user_agent,
     )
 
-    data = request.json
+    data = request.json or {}
     group_ids = data.get("group_ids", [])
-    verify_token = data.get("verify_token")
+    verify_token = request.headers.get("X-Export-Token") or data.get("verify_token")
     client_ip = get_client_ip()
     user_agent = get_user_agent()
 
@@ -810,13 +1070,7 @@ def api_export_selected_accounts() -> Any:
         f"导出选中分组的 {len(all_accounts)} 个账号",
     )
 
-    # 生成导出内容
-    lines = []
-    for acc in all_accounts:
-        line = f"{acc['email']}----{acc.get('password', '')}----{acc['client_id']}----{acc['refresh_token']}"
-        lines.append(line)
-
-    content = "\n".join(lines)
+    content = _build_export_text(all_accounts)
 
     # 生成文件名
     filename = f"selected_accounts_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"

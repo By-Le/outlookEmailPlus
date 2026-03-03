@@ -17,7 +17,8 @@ from outlook_web.security.crypto import (
 )
 
 # 数据库 Schema 版本（用于升级可验证/可诊断）
-DB_SCHEMA_VERSION = 2
+# v3：对齐 PRD-00005 / FD-00005 / TDD-00005（accounts 表新增多邮箱字段：account_type/provider/imap_host/imap_port/imap_password）
+DB_SCHEMA_VERSION = 3
 DB_SCHEMA_VERSION_KEY = "db_schema_version"
 DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY = "db_schema_last_upgrade_trace_id"
 DB_SCHEMA_LAST_UPGRADE_ERROR_KEY = "db_schema_last_upgrade_error"
@@ -186,6 +187,11 @@ def init_db(database_path: Optional[str] = None):
                 password TEXT,
                 client_id TEXT NOT NULL,
                 refresh_token TEXT NOT NULL,
+                account_type TEXT DEFAULT 'outlook',
+                provider TEXT DEFAULT 'outlook',
+                imap_host TEXT,
+                imap_port INTEGER DEFAULT 993,
+                imap_password TEXT,
                 group_id INTEGER,
                 remark TEXT,
                 status TEXT DEFAULT 'active',
@@ -394,6 +400,20 @@ def init_db(database_path: Optional[str] = None):
             )
         if "last_refresh_at" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN last_refresh_at TIMESTAMP")
+        if "account_type" not in columns:
+            cursor.execute(
+                "ALTER TABLE accounts ADD COLUMN account_type TEXT DEFAULT 'outlook'"
+            )
+        if "provider" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'outlook'")
+        if "imap_host" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN imap_host TEXT")
+        if "imap_port" not in columns:
+            cursor.execute(
+                "ALTER TABLE accounts ADD COLUMN imap_port INTEGER DEFAULT 993"
+            )
+        if "imap_password" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN imap_password TEXT")
 
         cursor.execute("PRAGMA table_info(groups)")
         group_columns = [col[1] for col in cursor.fetchall()]
@@ -644,14 +664,15 @@ def migrate_sensitive_data(conn: sqlite3.Connection):
     cursor = conn.cursor()
 
     # 获取所有账号
-    cursor.execute("SELECT id, password, refresh_token FROM accounts")
+    cursor.execute("SELECT id, password, refresh_token, imap_password FROM accounts")
     accounts = cursor.fetchall()
 
     migrated_count = 0
-    for account_id, password, refresh_token in accounts:
+    for account_id, password, refresh_token, imap_password in accounts:
         needs_update = False
         new_password = password
         new_refresh_token = refresh_token
+        new_imap_password = imap_password
 
         # 检查并加密 password
         if password and not is_encrypted(password):
@@ -663,15 +684,20 @@ def migrate_sensitive_data(conn: sqlite3.Connection):
             new_refresh_token = encrypt_data(refresh_token)
             needs_update = True
 
+        # 检查并加密 imap_password
+        if imap_password and not is_encrypted(imap_password):
+            new_imap_password = encrypt_data(imap_password)
+            needs_update = True
+
         # 更新数据库
         if needs_update:
             cursor.execute(
                 """
                 UPDATE accounts
-                SET password = ?, refresh_token = ?
+                SET password = ?, refresh_token = ?, imap_password = ?
                 WHERE id = ?
                 """,
-                (new_password, new_refresh_token, account_id),
+                (new_password, new_refresh_token, new_imap_password, account_id),
             )
             migrated_count += 1
 

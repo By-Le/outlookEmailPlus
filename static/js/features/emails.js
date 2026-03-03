@@ -116,6 +116,7 @@
                     }
                 }
             } catch (error) {
+                console.error('加载邮件列表失败:', error);
                 container.innerHTML = `
                     <div class="empty-state">
                         <span class="empty-icon">⚠️</span><p>网络错误，请重试</p>
@@ -260,7 +261,13 @@
                         showToast(`部分删除失败 (${result.failed_count} 封)`, 'warning');
                     }
                 } else {
-                    showToast('删除失败: ' + (result.error || '未知错误'), 'error');
+                    let msg = '未知错误';
+                    if (typeof result.error === 'string') {
+                        msg = result.error;
+                    } else if (result.error && result.error.message) {
+                        msg = result.error.message;
+                    }
+                    showToast('删除失败: ' + msg, 'error');
                 }
             } catch (e) {
                 showToast('网络错误', 'error');
@@ -298,7 +305,17 @@
 
                 if (data.success) {
                     currentEmailDetail = data.email;
-                    renderEmailDetail(data.email);
+                    try {
+                        renderEmailDetail(data.email);
+                    } catch (renderError) {
+                        console.error('渲染邮件详情失败:', renderError);
+                        // 渲染失败时回退为纯文本显示
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <span class="empty-icon">⚠️</span><p>邮件渲染失败: ${escapeHtml(renderError.message || '未知错误')}</p>
+                            </div>
+                        `;
+                    }
                 } else {
                     handleApiError(data, '加载邮件详情失败');
                     container.innerHTML = `
@@ -308,9 +325,10 @@
                     `;
                 }
             } catch (error) {
+                console.error('加载邮件详情失败:', error);
                 container.innerHTML = `
                     <div class="empty-state">
-                        <span class="empty-icon">⚠️</span><p>网络错误，请重试</p>
+                        <span class="empty-icon">⚠️</span><p>网络错误，请重试 (${escapeHtml(error.message || '')})</p>
                     </div>
                 `;
             }
@@ -363,7 +381,7 @@
                     let sanitizedBody;
                     if (isTrustedMode) {
                         sanitizedBody = email.body; // 信任模式：不过滤
-                    } else {
+                    } else if (typeof DOMPurify !== 'undefined') {
                         // 使用 DOMPurify 净化 HTML 内容，防止 XSS 攻击
                         sanitizedBody = DOMPurify.sanitize(email.body, {
                             ALLOWED_TAGS: ['a', 'b', 'i', 'u', 'strong', 'em', 'p', 'br', 'div', 'span', 'img', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code'],
@@ -372,6 +390,14 @@
                             FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
                             FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur']
                         });
+                    } else {
+                        // DOMPurify 未加载（CDN 不可达），回退为基本过滤
+                        console.warn('DOMPurify 未加载，使用基本 HTML 过滤');
+                        sanitizedBody = email.body
+                            .replace(/<script[\s\S]*?<\/script>/gi, '')
+                            .replace(/<style[\s\S]*?<\/style>/gi, '')
+                            .replace(/on\w+="[^"]*"/gi, '')
+                            .replace(/on\w+='[^']*'/gi, '');
                     }
 
                     const htmlContent = `
