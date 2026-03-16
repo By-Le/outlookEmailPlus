@@ -27,6 +27,7 @@ class ExternalPoolApiTests(unittest.TestCase):
             db.commit()
             settings_repo.set_setting("external_api_key", "")
             settings_repo.set_setting("external_api_public_mode", "0")
+            settings_repo.set_setting("pool_external_enabled", "false")
 
     @staticmethod
     def _auth_headers(value: str = "abc123"):
@@ -83,6 +84,10 @@ class ExternalPoolApiTests(unittest.TestCase):
     def test_external_pool_claim_random_success(self):
         client = self.app.test_client()
         self._set_external_api_key("abc123")
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            settings_repo.set_setting("pool_external_enabled", "true")
         self._insert_pool_account(provider="outlook")
 
         resp = client.post(
@@ -107,6 +112,10 @@ class ExternalPoolApiTests(unittest.TestCase):
     def test_external_pool_claim_release_caller_mismatch(self):
         client = self.app.test_client()
         self._set_external_api_key("abc123")
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            settings_repo.set_setting("pool_external_enabled", "true")
         self._insert_pool_account(provider="outlook")
 
         claim_resp = client.post(
@@ -140,6 +149,10 @@ class ExternalPoolApiTests(unittest.TestCase):
     def test_external_pool_stats_success(self):
         client = self.app.test_client()
         self._set_external_api_key("abc123")
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            settings_repo.set_setting("pool_external_enabled", "true")
         self._insert_pool_account(pool_status="available")
         self._insert_pool_account(pool_status="used")
 
@@ -150,3 +163,14 @@ class ExternalPoolApiTests(unittest.TestCase):
         self.assertTrue(data.get("success"))
         self.assertEqual(data.get("code"), "OK")
         self.assertIn("pool_counts", data.get("data", {}))
+
+    def test_external_pool_stats_returns_feature_disabled_when_switch_off(self):
+        client = self.app.test_client()
+        self._set_external_api_key("abc123")
+
+        resp = client.get("/api/external/pool/stats", headers=self._auth_headers())
+
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertFalse(data.get("success"))
+        self.assertEqual(data.get("code"), "FEATURE_DISABLED")

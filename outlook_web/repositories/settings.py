@@ -79,7 +79,9 @@ def get_external_api_key_masked(head: int = 4, tail: int = 4) -> str:
     safe_value = str(key)
     if len(safe_value) <= head + tail:
         return "*" * len(safe_value)
-    return safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    return (
+        safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    )
 
 
 # ── P1：公网模式安全配置 ──────────────────────────────
@@ -119,3 +121,7 @@ def get_external_api_disable_wait_message() -> bool:
 def get_external_api_disable_raw_content() -> bool:
     """是否禁用 raw 端点（默认不禁用）。"""
     return get_setting("external_api_disable_raw_content", "false").lower() == "true"
+
+
+def get_pool_external_enabled() -> bool:
+    return get_setting("pool_external_enabled", "false").lower() == "true"

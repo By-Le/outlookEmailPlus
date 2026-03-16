@@ -20,6 +20,7 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
             db.execute("DELETE FROM external_api_consumer_usage_daily")
             db.commit()
             settings_repo.set_setting("external_api_key", "")
+            settings_repo.set_setting("pool_external_enabled", "false")
 
     def _login(self, client, password: str = "testpass123"):
         resp = client.post("/login", json={"password": password})
@@ -98,7 +99,9 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
 
     def test_get_settings_exposes_external_api_keys_list(self):
         with self.app.app_context():
-            from outlook_web.repositories import external_api_keys as external_api_keys_repo
+            from outlook_web.repositories import (
+                external_api_keys as external_api_keys_repo,
+            )
 
             external_api_keys_repo.create_external_api_key(
                 name="partner-a",
@@ -116,7 +119,10 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
         self.assertTrue(settings.get("external_api_multi_key_set"))
         self.assertEqual(settings.get("external_api_keys_count"), 1)
         self.assertEqual(settings.get("external_api_keys", [])[0]["name"], "partner-a")
-        self.assertEqual(settings.get("external_api_keys", [])[0]["allowed_emails"], ["user1@example.com"])
+        self.assertEqual(
+            settings.get("external_api_keys", [])[0]["allowed_emails"],
+            ["user1@example.com"],
+        )
 
     def test_put_settings_can_replace_external_api_keys(self):
         client = self.app.test_client()
@@ -206,6 +212,34 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
         settings = resp2.get_json().get("settings", {})
         self.assertEqual(settings.get("external_api_keys_count"), 1)
         self.assertFalse(settings.get("external_api_keys", [])[0]["enabled"])
+
+    def test_get_settings_exposes_pool_external_enabled(self):
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            settings_repo.set_setting("pool_external_enabled", "true")
+
+        client = self.app.test_client()
+        self._login(client)
+        resp = client.get("/api/settings")
+
+        self.assertEqual(resp.status_code, 200)
+        settings = resp.get_json().get("settings", {})
+        self.assertTrue(settings.get("pool_external_enabled"))
+
+    def test_put_settings_can_update_pool_external_enabled(self):
+        client = self.app.test_client()
+        self._login(client)
+
+        resp = client.put("/api/settings", json={"pool_external_enabled": True})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json().get("success"))
+
+        resp2 = client.get("/api/settings")
+        self.assertEqual(resp2.status_code, 200)
+        settings = resp2.get_json().get("settings", {})
+        self.assertTrue(settings.get("pool_external_enabled"))
 
 
 if __name__ == "__main__":

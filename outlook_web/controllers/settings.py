@@ -11,7 +11,12 @@ from outlook_web.db import get_db
 from outlook_web.repositories import external_api_keys as external_api_keys_repo
 from outlook_web.repositories import settings as settings_repo
 from outlook_web.security.auth import login_required
-from outlook_web.security.crypto import decrypt_data, encrypt_data, hash_password, is_encrypted
+from outlook_web.security.crypto import (
+    decrypt_data,
+    encrypt_data,
+    hash_password,
+    is_encrypted,
+)
 
 # ==================== 设置 API ====================
 
@@ -22,7 +27,9 @@ def _mask_secret_value(value: str, head: int = 4, tail: int = 4) -> str:
     safe_value = str(value)
     if len(safe_value) <= head + tail:
         return "*" * len(safe_value)
-    return safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    return (
+        safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    )
 
 
 def _parse_allowed_emails_input(raw: Any) -> list[str]:
@@ -38,7 +45,10 @@ def _parse_allowed_emails_input(raw: Any) -> list[str]:
             parsed = json.loads(text)
             values = parsed if isinstance(parsed, list) else []
         except (json.JSONDecodeError, TypeError):
-            values = [item.strip() for item in text.replace("\r", "\n").replace(",", "\n").split("\n")]
+            values = [
+                item.strip()
+                for item in text.replace("\r", "\n").replace(",", "\n").split("\n")
+            ]
 
     result: list[str] = []
     seen: set[str] = set()
@@ -77,9 +87,12 @@ def api_get_settings() -> Any:
         "refresh_delay_seconds": all_settings.get("refresh_delay_seconds", "5"),
         "refresh_cron": all_settings.get("refresh_cron", "0 2 * * *"),
         "use_cron_schedule": all_settings.get("use_cron_schedule", "false"),
-        "enable_scheduled_refresh": all_settings.get("enable_scheduled_refresh", "true"),
+        "enable_scheduled_refresh": all_settings.get(
+            "enable_scheduled_refresh", "true"
+        ),
         # 轮询配置
-        "enable_auto_polling": all_settings.get("enable_auto_polling", "false") == "true",
+        "enable_auto_polling": all_settings.get("enable_auto_polling", "false")
+        == "true",
         "polling_interval": int(all_settings.get("polling_interval", "10")),
         "polling_count": int(all_settings.get("polling_count", "5")),
     }
@@ -88,7 +101,9 @@ def api_get_settings() -> Any:
     login_password_value = all_settings.get("login_password") or ""
     gptmail_api_key_value = all_settings.get("gptmail_api_key") or ""
     external_api_key_value = settings_repo.get_external_api_key()
-    external_api_keys = external_api_keys_repo.list_external_api_keys(include_disabled=True)
+    external_api_keys = external_api_keys_repo.list_external_api_keys(
+        include_disabled=True
+    )
     usage_summary = external_api_keys_repo.get_external_api_usage_summary(
         [item.get("consumer_key") or "" for item in external_api_keys]
     )
@@ -106,38 +121,59 @@ def api_get_settings() -> Any:
         )
     safe_settings["login_password_set"] = bool(login_password_value)
     safe_settings["gptmail_api_key_set"] = bool(gptmail_api_key_value)
-    safe_settings["gptmail_api_key_masked"] = _mask_secret_value(gptmail_api_key_value) if gptmail_api_key_value else ""
+    safe_settings["gptmail_api_key_masked"] = (
+        _mask_secret_value(gptmail_api_key_value) if gptmail_api_key_value else ""
+    )
     safe_settings["external_api_key_set"] = bool(external_api_key_value)
-    safe_settings["external_api_key_masked"] = _mask_secret_value(external_api_key_value) if external_api_key_value else ""
+    safe_settings["external_api_key_masked"] = (
+        _mask_secret_value(external_api_key_value) if external_api_key_value else ""
+    )
     safe_settings["external_api_keys"] = external_api_keys
     safe_settings["external_api_keys_count"] = len(external_api_keys)
     safe_settings["external_api_multi_key_set"] = bool(external_api_keys)
 
     # P1：公网模式安全配置
-    safe_settings["external_api_public_mode"] = settings_repo.get_external_api_public_mode()
-    safe_settings["external_api_ip_whitelist"] = settings_repo.get_external_api_ip_whitelist()
-    safe_settings["external_api_rate_limit_per_minute"] = settings_repo.get_external_api_rate_limit()
-    safe_settings["external_api_disable_raw_content"] = settings_repo.get_external_api_disable_raw_content()
-    safe_settings["external_api_disable_wait_message"] = settings_repo.get_external_api_disable_wait_message()
+    safe_settings["external_api_public_mode"] = (
+        settings_repo.get_external_api_public_mode()
+    )
+    safe_settings["external_api_ip_whitelist"] = (
+        settings_repo.get_external_api_ip_whitelist()
+    )
+    safe_settings["external_api_rate_limit_per_minute"] = (
+        settings_repo.get_external_api_rate_limit()
+    )
+    safe_settings["external_api_disable_raw_content"] = (
+        settings_repo.get_external_api_disable_raw_content()
+    )
+    safe_settings["external_api_disable_wait_message"] = (
+        settings_repo.get_external_api_disable_wait_message()
+    )
+    safe_settings["pool_external_enabled"] = settings_repo.get_pool_external_enabled()
 
     # Telegram 推送配置
     tg_bot_token_raw = all_settings.get("telegram_bot_token", "")
     if tg_bot_token_raw and is_encrypted(tg_bot_token_raw):
         try:
             plain_token = decrypt_data(tg_bot_token_raw)
-            safe_settings["telegram_bot_token"] = "****" + plain_token[-4:] if len(plain_token) > 4 else "****"
+            safe_settings["telegram_bot_token"] = (
+                "****" + plain_token[-4:] if len(plain_token) > 4 else "****"
+            )
         except Exception:
             safe_settings["telegram_bot_token"] = "****"
     else:
         safe_settings["telegram_bot_token"] = ""
     safe_settings["telegram_chat_id"] = all_settings.get("telegram_chat_id", "")
-    safe_settings["telegram_poll_interval"] = int(all_settings.get("telegram_poll_interval", "600") or "600")
+    safe_settings["telegram_poll_interval"] = int(
+        all_settings.get("telegram_poll_interval", "600") or "600"
+    )
 
     response = {"success": True, "settings": safe_settings}
     # 同时在顶层暴露 telegram 字段（兼容前端直接访问）
     response["telegram_bot_token"] = safe_settings.get("telegram_bot_token", "")
     response["telegram_chat_id"] = safe_settings.get("telegram_chat_id", "")
-    response["telegram_poll_interval"] = safe_settings.get("telegram_poll_interval", 600)
+    response["telegram_poll_interval"] = safe_settings.get(
+        "telegram_poll_interval", 600
+    )
 
     return jsonify(response)
 
@@ -161,7 +197,11 @@ def api_update_settings() -> Any:
     pending_operations: list[Any] = []
 
     def queue_setting_update(key: str, value: str) -> None:
-        pending_operations.append(lambda key=key, value=value: settings_repo.set_setting(key, value, commit=False))
+        pending_operations.append(
+            lambda key=key, value=value: settings_repo.set_setting(
+                key, value, commit=False
+            )
+        )
 
     def queue_operation(op: Any) -> None:
         pending_operations.append(op)
@@ -182,7 +222,11 @@ def api_update_settings() -> Any:
     if "gptmail_api_key" in data:
         new_api_key = str(data["gptmail_api_key"] or "").strip()
         existing_api_key = settings_repo.get_setting("gptmail_api_key", "") or ""
-        if new_api_key and existing_api_key and new_api_key == _mask_secret_value(existing_api_key):
+        if (
+            new_api_key
+            and existing_api_key
+            and new_api_key == _mask_secret_value(existing_api_key)
+        ):
             updated.append("GPTMail API Key（未变更）")
         elif new_api_key:
             queue_setting_update("gptmail_api_key", new_api_key)
@@ -217,7 +261,10 @@ def api_update_settings() -> Any:
             errors.append("external_api_keys 必须是数组")
         else:
             existing_keys = {
-                int(item["id"]): item for item in external_api_keys_repo.list_external_api_keys(include_disabled=True)
+                int(item["id"]): item
+                for item in external_api_keys_repo.list_external_api_keys(
+                    include_disabled=True
+                )
             }
             normalized_items: list[dict[str, Any]] = []
             seen_names: set[str] = set()
@@ -261,8 +308,13 @@ def api_update_settings() -> Any:
                     api_key_value = None
 
                 allowed_emails = _parse_allowed_emails_input(item.get("allowed_emails"))
-                if item.get("allowed_emails") not in (None, "", []) and not allowed_emails:
-                    errors.append(f"external_api_keys[{index}].allowed_emails 至少包含一个合法邮箱")
+                if (
+                    item.get("allowed_emails") not in (None, "", [])
+                    and not allowed_emails
+                ):
+                    errors.append(
+                        f"external_api_keys[{index}].allowed_emails 至少包含一个合法邮箱"
+                    )
                     continue
 
                 normalized_items.append(
@@ -335,6 +387,14 @@ def api_update_settings() -> Any:
             updated.append("对外 API 禁用 wait-message 端点")
         else:
             errors.append("禁用 wait-message 端点必须是 true 或 false")
+
+    if "pool_external_enabled" in data:
+        val = str(data["pool_external_enabled"]).lower()
+        if val in ("true", "false"):
+            queue_setting_update("pool_external_enabled", val)
+            updated.append("external pool 总开关")
+        else:
+            errors.append("external pool 总开关必须是 true 或 false")
 
     # 更新刷新周期
     if "refresh_interval_days" in data:
@@ -486,7 +546,9 @@ def api_update_settings() -> Any:
                     # 避免将 current_app(LocalProxy) 直接作为 job 参数，导致后续执行时报“Working outside of application context”。
                     app_obj = current_app._get_current_object()
                     scheduler_service.configure_scheduler_jobs(
-                        scheduler, app_obj, graph_service.test_refresh_token_with_rotation
+                        scheduler,
+                        app_obj,
+                        graph_service.test_refresh_token_with_rotation,
                     )
                     scheduler_reloaded = True
                 else:
@@ -509,7 +571,7 @@ def api_update_settings() -> Any:
         return jsonify(
             {
                 "success": True,
-                "message": f'已更新：{", ".join(updated)}',
+                "message": f"已更新：{', '.join(updated)}",
                 "scheduler_reloaded": scheduler_reloaded,
             }
         )
@@ -556,7 +618,9 @@ def api_validate_cron() -> Any:
             }
         )
     except Exception as e:
-        return jsonify({"success": False, "valid": False, "error": f"Cron 表达式无效: {str(e)}"})
+        return jsonify(
+            {"success": False, "valid": False, "error": f"Cron 表达式无效: {str(e)}"}
+        )
 
 
 @login_required
@@ -568,13 +632,24 @@ def api_test_telegram() -> Any:
     chat_id = settings_repo.get_setting("telegram_chat_id", "")
 
     if not bot_token_raw or not chat_id:
-        return jsonify({"success": False, "error": "请先配置 Telegram Bot Token 和 Chat ID"})
+        return jsonify(
+            {"success": False, "error": "请先配置 Telegram Bot Token 和 Chat ID"}
+        )
 
-    bot_token = decrypt_data(bot_token_raw) if is_encrypted(bot_token_raw) else bot_token_raw
+    bot_token = (
+        decrypt_data(bot_token_raw) if is_encrypted(bot_token_raw) else bot_token_raw
+    )
 
-    ok = _send_telegram_message(bot_token, chat_id, "✅ Outlook Email Plus 测试消息：配置正确！")
+    ok = _send_telegram_message(
+        bot_token, chat_id, "✅ Outlook Email Plus 测试消息：配置正确！"
+    )
     if ok:
         log_audit("telegram_test", "settings", None, "测试消息发送成功")
         return jsonify({"success": True, "message": "测试消息已发送，请检查 Telegram"})
     else:
-        return jsonify({"success": False, "error": "发送失败，请检查 Bot Token 和 Chat ID 是否正确"})
+        return jsonify(
+            {
+                "success": False,
+                "error": "发送失败，请检查 Bot Token 和 Chat ID 是否正确",
+            }
+        )
