@@ -140,7 +140,7 @@ PROVIDER_FOLDER_MAP: Dict[str, Dict[str, List[str]]] = {
     },
     "_default": {
         "inbox": ["INBOX"],
-        "junkemail": ["Junk", "Spam", "SPAM", "Bulk Mail"],
+        "junkemail": ["Junk", "Junk Email", "Spam", "SPAM", "Bulk Mail"],
         "deleteditems": ["Trash", "Deleted", "Deleted Messages"],
     },
 }

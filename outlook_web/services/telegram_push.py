@@ -14,6 +14,7 @@ import requests
 
 from outlook_web.repositories import notification_state as notification_state_repo
 from outlook_web.services import notification_dispatch
+from outlook_web.services.providers import get_imap_folder_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +106,24 @@ def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_imap_folder(folder: str) -> list[str]:
-    normalized = (folder or "inbox").strip().lower()
-    if normalized == "junkemail":
-        return ["Junk", "Junk Email", "Spam"]
-    return ["INBOX"]
+def _quote_imap_folder_name(folder_name: str) -> list[str]:
+    name = (folder_name or "").strip()
+    if not name:
+        return []
+    if name.startswith('"') and name.endswith('"'):
+        return [name]
+    if " " in name:
+        return [name, f'"{name}"']
+    return [name]
+
+
+def _resolve_imap_folder(account: dict, folder: str) -> list[str]:
+    provider = (account.get("provider") or "").strip().lower() or "_default"
+    candidates = get_imap_folder_candidates(provider, folder)
+    resolved: list[str] = []
+    for candidate in candidates:
+        resolved.extend(_quote_imap_folder_name(candidate))
+    return resolved or ["INBOX"]
 
 
 def _call_fetcher_with_folder(fetcher, account: dict, since: str, folder: str) -> List[dict]:
@@ -164,12 +178,25 @@ def _fetch_new_emails_imap(account: dict, since: str, folder: str = "inbox") -> 
         conn = imaplib.IMAP4_SSL(host, port, timeout=15)
         conn.login(user, password)
         selected = False
-        for folder_name in _resolve_imap_folder(folder):
-            status, _ = conn.select(folder_name, readonly=True)
-            if status == "OK":
-                selected = True
-                break
+        last_select_error = None
+        for folder_name in _resolve_imap_folder(account, folder):
+            try:
+                status, _ = conn.select(folder_name, readonly=True)
+                if status == "OK":
+                    selected = True
+                    break
+                last_select_error = f"select {folder_name} status={status}"
+            except Exception as exc:
+                last_select_error = str(exc)
+                continue
         if not selected:
+            logger.warning(
+                "[telegram_push] folder select failed email=%s provider=%s folder=%s err=%s",
+                user,
+                account.get("provider"),
+                folder,
+                last_select_error or "unknown",
+            )
             return results
 
         _, data = conn.search(None, f'(SINCE "{since_date_str}")')

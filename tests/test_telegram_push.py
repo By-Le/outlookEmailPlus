@@ -984,6 +984,86 @@ class TestFetchAccountEmails(unittest.TestCase):
         )
         mock_imap.assert_not_called()
 
+    def test_imap_folder_resolution_uses_provider_specific_candidates_for_gmail_junk(self):
+        from outlook_web.services.telegram_push import _resolve_imap_folder
+
+        account = {"email": "x@gmail.com", "provider": "gmail"}
+
+        candidates = _resolve_imap_folder(account, "junkemail")
+
+        self.assertIn("[Gmail]/Spam", candidates)
+        self.assertNotIn("Junk Email", candidates)
+
+    def test_imap_folder_resolution_keeps_default_fallback_for_unknown_provider_junk_email(self):
+        from outlook_web.services.telegram_push import _resolve_imap_folder
+
+        account = {"email": "x@custom.test", "provider": "unknown-provider"}
+
+        candidates = _resolve_imap_folder(account, "junkemail")
+
+        self.assertIn("Junk Email", candidates)
+        self.assertIn('"Junk Email"', candidates)
+
+    def test_imap_fetch_continues_when_one_folder_candidate_raises_parse_error(self):
+        from outlook_web.services.telegram_push import _fetch_new_emails_imap
+
+        account = {
+            "email": "x@gmail.com",
+            "provider": "gmail",
+            "imap_host": "imap.gmail.com",
+            "imap_port": 993,
+            "imap_password": "",
+        }
+
+        conn = MagicMock()
+        conn.select.side_effect = [
+            Exception("EXAMINE command error: BAD [b'Could not parse command']"),
+            ("OK", [b"1"]),
+        ]
+        conn.search.return_value = ("OK", [b""])
+
+        with patch("imaplib.IMAP4_SSL", return_value=conn):
+            emails = _fetch_new_emails_imap(
+                account,
+                "2026-03-01T00:00:00",
+                folder="junkemail",
+            )
+
+        self.assertEqual(emails, [])
+        self.assertEqual(conn.select.call_count, 2)
+
+    def test_imap_fetch_retries_quoted_folder_name_after_space_name_parse_error(self):
+        from outlook_web.services.telegram_push import _fetch_new_emails_imap
+
+        account = {
+            "email": "x@custom.test",
+            "provider": "unknown-provider",
+            "imap_host": "imap.custom.test",
+            "imap_port": 993,
+            "imap_password": "",
+        }
+
+        conn = MagicMock()
+        conn.select.side_effect = [
+            ("NO", [b"not found"]),
+            Exception("EXAMINE command error: BAD [b'Could not parse command']"),
+            ("OK", [b"1"]),
+        ]
+        conn.search.return_value = ("OK", [b""])
+
+        with patch("imaplib.IMAP4_SSL", return_value=conn):
+            emails = _fetch_new_emails_imap(
+                account,
+                "2026-03-01T00:00:00",
+                folder="junkemail",
+            )
+
+        self.assertEqual(emails, [])
+        self.assertEqual(
+            [call.args[0] for call in conn.select.call_args_list],
+            ["Junk", "Junk Email", '"Junk Email"'],
+        )
+
 
 class TestParallelJobBehavior(unittest.TestCase):
     """BUG-00010: 并行 job 行为测试"""
