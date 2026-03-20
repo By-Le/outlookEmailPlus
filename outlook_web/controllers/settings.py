@@ -7,6 +7,7 @@ from typing import Any
 
 from flask import jsonify, request
 
+from outlook_web import config
 from outlook_web.audit import log_audit
 from outlook_web.db import get_db
 from outlook_web.errors import build_error_payload
@@ -171,6 +172,9 @@ def api_get_settings() -> Any:
             )
         )
     safe_settings["login_password_set"] = bool(login_password_value)
+    safe_settings["allow_login_password_change"] = (
+        config.get_allow_login_password_change()
+    )
     safe_settings["gptmail_api_key_set"] = bool(gptmail_api_key_value)
     safe_settings["gptmail_api_key_masked"] = (
         _mask_secret_value(gptmail_api_key_value) if gptmail_api_key_value else ""
@@ -350,6 +354,13 @@ def api_update_settings() -> Any:
     if "login_password" in data:
         new_password = data["login_password"].strip()
         if new_password:
+            if not config.get_allow_login_password_change():
+                return _json_error(
+                    "LOGIN_PASSWORD_CHANGE_DISABLED",
+                    "当前站点已禁用登录密码修改",
+                    status=403,
+                    message_en="Login password changes are disabled on this site",
+                )
             if len(new_password) < 8:
                 errors.append("密码长度至少为 8 位")
             else:

@@ -196,6 +196,8 @@
         '建议设置为 30 天，防止 Token 因 90 天不使用而过期': 'Recommended: 30 days to prevent token expiration after 90 days of inactivity.',
         '建议设置为 5-10 秒，避免频繁请求触发 API 限流': 'Recommended: 5-10 seconds to avoid triggering API rate limits with frequent requests.',
         '输入新密码（留空则不修改）': 'Enter a new password (leave blank to keep unchanged)',
+        '当前站点已禁用修改登录密码': 'Login password changes are disabled on this site',
+        '演示站点可通过环境变量禁止在设置页修改登录密码': 'This demo site disables login password changes via an environment variable.',
         '输入 GPTMail API Key': 'Enter the GPTMail API key',
         '用于 /api/external/* 的 X-API-Key': 'Used as the X-API-Key for /api/external/*',
         '用于对外开放接口鉴权（请求头：X-API-Key）。如需禁用对外开放接口，可清空后保存。': 'Used to authorize external APIs with the X-API-Key header. Clear it and save to disable external APIs.',

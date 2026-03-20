@@ -53,6 +53,10 @@ def env_true(key: str, default: bool) -> bool:
     return value.lower() == "true"
 
 
+def get_allow_login_password_change() -> bool:
+    return env_true("ALLOW_LOGIN_PASSWORD_CHANGE", True)
+
+
 def get_scheduler_autostart_default() -> bool:
     return env_true("SCHEDULER_AUTOSTART", True)
 

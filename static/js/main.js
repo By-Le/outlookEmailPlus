@@ -1000,6 +1000,27 @@ ${details}
             }
         }
 
+        function setSettingsPasswordChangeEnabled(enabled) {
+            const passwordEl = document.getElementById('settingsPassword');
+            const hintEl = document.getElementById('settingsPasswordHint');
+            const groupEl = document.getElementById('settingsPasswordGroup');
+            if (!passwordEl || !hintEl) return;
+
+            passwordEl.value = '';
+            passwordEl.disabled = !enabled;
+            passwordEl.dataset.allowChange = enabled ? 'true' : 'false';
+            passwordEl.placeholder = translateAppTextLocal(
+                enabled ? '输入新密码（留空则不修改）' : '当前站点已禁用修改登录密码'
+            );
+            hintEl.textContent = translateAppTextLocal(
+                enabled ? '用于登录系统的密码' : '演示站点可通过环境变量禁止在设置页修改登录密码'
+            );
+
+            if (groupEl) {
+                groupEl.style.opacity = enabled ? '1' : '0.7';
+            }
+        }
+
         // 加载设置
         async function loadSettings() {
             try {
@@ -1007,8 +1028,7 @@ ${details}
                 const data = await response.json();
 
                 if (data.success) {
-                    // 密码不回显
-                    document.getElementById('settingsPassword').value = '';
+                    setSettingsPasswordChangeEnabled(data.settings.allow_login_password_change !== false);
 
                     // GPTMail API Key（仅脱敏展示，避免回填明文）
                     const gptmailApiKeyEl = document.getElementById('settingsApiKey');
@@ -1154,7 +1174,9 @@ ${details}
 
         // 保存设置
         async function saveSettings() {
-            const password = document.getElementById('settingsPassword').value;
+            const passwordInputEl = document.getElementById('settingsPassword');
+            const password = passwordInputEl ? passwordInputEl.value : '';
+            const allowPasswordChange = passwordInputEl ? passwordInputEl.dataset.allowChange !== 'false' : true;
 
             const gptmailApiKeyEl = document.getElementById('settingsApiKey');
             const gptmailApiKey = gptmailApiKeyEl ? gptmailApiKeyEl.value.trim() : '';
@@ -1188,6 +1210,10 @@ ${details}
 
             // 只有输入了密码才更新密码
             if (password) {
+                if (!allowPasswordChange) {
+                    showToast(translateAppTextLocal('当前站点已禁用修改登录密码'), 'error');
+                    return;
+                }
                 settings.login_password = password;
             }
 

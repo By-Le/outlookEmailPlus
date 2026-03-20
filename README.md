@@ -40,6 +40,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -e SECRET_KEY=your-secret-key-here \
   -e LOGIN_PASSWORD=your-login-password \
+  -e ALLOW_LOGIN_PASSWORD_CHANGE=false \
   ghcr.io/zeropointsix/outlook-email-plus:latest
 ```
 
@@ -60,6 +61,7 @@ python start.py
 
 - `SECRET_KEY`：会话与敏感字段加密密钥
 - `LOGIN_PASSWORD`：后台登录密码
+- `ALLOW_LOGIN_PASSWORD_CHANGE`：是否允许在设置页修改登录密码，演示站点建议设为 `false`
 - `DATABASE_PATH`：SQLite 数据库路径
 - `OAUTH_CLIENT_ID`：Outlook OAuth 应用 ID
 - `OAUTH_REDIRECT_URI`：Outlook OAuth 回调地址
