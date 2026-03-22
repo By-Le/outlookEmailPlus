@@ -466,6 +466,8 @@ def _build_active_channels_for_source(
     email_enabled: bool,
     telegram_runtime: dict[str, str] | None,
 ) -> list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]]:
+    # 账号级 telegram_push_enabled 现在表示“是否参与任意通知渠道”；
+    # Email/Telegram 只是通道层，避免后续维护时把它误改回 Telegram 专属开关。
     if not _is_source_notification_enabled(source):
         return []
 

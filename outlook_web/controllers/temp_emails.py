@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 def _should_refresh_temp_email_detail(msg: dict[str, Any] | None) -> bool:
+    # 本地已有记录也可能仍需回源：例如只缓存了简化正文，或 HTML 中存在 cid: 引用但
+    # raw_content 里还没有可解析的内联资源映射，此时必须补抓详情才能正确显示图片。
     if not msg:
         return True
 

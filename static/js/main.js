@@ -353,6 +353,8 @@
         }
 
         function scheduleAccountPanelDensitySync() {
+            // 使用双层 rAF（以及 setTimeout fallback）刻意等待切页/拖拽后的布局回流完成，
+            // 避免首次进入 mailbox 时按 0 宽或旧宽度错误计算紧凑模式。
             const runSync = () => {
                 accountPanelDensitySyncHandle = null;
                 syncAccountPanelDensityIfVisible();
@@ -534,6 +536,8 @@
                 return csrfToken;
             }
 
+            // 单飞刷新：并发写请求共享同一次 token 拉取；若后端明确返回 CSRF_TOKEN_INVALID，
+            // fetch 包装层会强制刷新 token 并只重放一次原请求，避免无限重试或抢刷 token。
             if (csrfTokenRefreshPromise) {
                 return csrfTokenRefreshPromise;
             }

@@ -170,6 +170,8 @@ def _consume_expected_oauth_state(state: str) -> bool:
 
 def oauth_callback_page() -> Any:
     """OAuth 回调页：将授权结果回传给主窗口，失败时提供手工复制兜底。"""
+    # 这里仅负责承接微软回跳并把结果交还给前端主窗口，不在 callback 页直接换 token，
+    # 这样前端仍可先完成本地二次验证，并保留手工复制 URL 的兜底路径。
     return render_template("oauth_callback.html")
 
 
@@ -305,8 +307,9 @@ def api_exchange_oauth_token() -> Any:
     client_ip = get_client_ip()
     user_agent = get_user_agent()
 
-    # 二次验证（敏感信息：refresh_token 不默认明文返回）
-    # 先校验 token 与当前客户端的绑定关系，避免绑定不匹配时先消耗微软授权码。
+    # 两阶段保护：
+    # 1) 先校验 verify_token 仍绑定当前客户端，避免绑定不匹配时先消耗微软授权码。
+    # 2) 等微软真正返回 refresh_token 后再消费 verify_token，避免失败请求提前烧掉一次性凭据。
     ok, error_message = check_export_verify_token_bound(verify_token, client_ip, user_agent)
     if not ok:
         return build_export_verify_failure_response(error_message)
