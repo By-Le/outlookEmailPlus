@@ -179,6 +179,13 @@ def api_get_accounts() -> Any:
                 "tags": acc.get("tags", []),
                 "telegram_push_enabled": bool(acc.get("telegram_push_enabled")),
                 "notification_enabled": bool(acc.get("telegram_push_enabled")),
+                "latest_email_subject": acc.get("latest_email_subject", ""),
+                "latest_email_from": acc.get("latest_email_from", ""),
+                "latest_email_folder": acc.get("latest_email_folder", ""),
+                "latest_email_received_at": acc.get("latest_email_received_at", ""),
+                "latest_verification_code": acc.get("latest_verification_code", ""),
+                "latest_verification_folder": acc.get("latest_verification_folder", ""),
+                "latest_verification_received_at": acc.get("latest_verification_received_at", ""),
             }
         )
     return jsonify({"success": True, "accounts": safe_accounts})
@@ -211,6 +218,13 @@ def api_get_account(account_id: int) -> Any:
                 "provider": account.get("provider") or "outlook",
                 "telegram_push_enabled": bool(account.get("telegram_push_enabled")),
                 "notification_enabled": bool(account.get("telegram_push_enabled")),
+                "latest_email_subject": account.get("latest_email_subject", ""),
+                "latest_email_from": account.get("latest_email_from", ""),
+                "latest_email_folder": account.get("latest_email_folder", ""),
+                "latest_email_received_at": account.get("latest_email_received_at", ""),
+                "latest_verification_code": account.get("latest_verification_code", ""),
+                "latest_verification_folder": account.get("latest_verification_folder", ""),
+                "latest_verification_received_at": account.get("latest_verification_received_at", ""),
                 "created_at": account.get("created_at", ""),
                 "updated_at": account.get("updated_at", ""),
             },
@@ -1507,6 +1521,13 @@ def api_search_accounts() -> Any:
                 "notification_enabled": bool(acc.get("telegram_push_enabled")),
                 "last_refresh_status": (last_refresh_log.get("status") if last_refresh_log else None),
                 "last_refresh_error": (last_refresh_log.get("error_message") if last_refresh_log else None),
+                "latest_email_subject": acc.get("latest_email_subject", ""),
+                "latest_email_from": acc.get("latest_email_from", ""),
+                "latest_email_folder": acc.get("latest_email_folder", ""),
+                "latest_email_received_at": acc.get("latest_email_received_at", ""),
+                "latest_verification_code": acc.get("latest_verification_code", ""),
+                "latest_verification_folder": acc.get("latest_verification_folder", ""),
+                "latest_verification_received_at": acc.get("latest_verification_received_at", ""),
             }
         )
 

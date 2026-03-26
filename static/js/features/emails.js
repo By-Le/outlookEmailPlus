@@ -60,6 +60,10 @@
                         syncAccountSummaryToAccountCache(email, data.account_summary);
                     }
 
+                    if (typeof syncAccountSummaryToAccountCache === 'function' && data.account_summary) {
+                        syncAccountSummaryToAccountCache(email, data.account_summary);
+                    }
+
                     // 保存到缓存
                     emailListCache[cacheKey] = {
                         emails: currentEmails,

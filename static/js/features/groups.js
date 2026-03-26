@@ -19,6 +19,9 @@
                     }
 
                     renderGroupList(data.groups);
+                    if (typeof renderCompactGroupStrip === 'function') {
+                        renderCompactGroupStrip(data.groups, currentGroupId);
+                    }
                     updateGroupSelects();
 
                     // 如果之前选中了分组，保持选中状态并刷新邮箱列表
@@ -34,7 +37,7 @@
                         }
                     } else {
                         // 首次进入：自动选中第一个非临时邮箱分组
-                        const firstNormalGroup = groups.find(g => g.name !== '临时邮箱');
+                        const firstNormalGroup = groups.find(g => !isTempMailboxGroup(g));
                         if (firstNormalGroup) {
                             selectGroup(firstNormalGroup.id);
                         }
@@ -51,7 +54,7 @@
             const container = document.getElementById('groupList');
 
             // 过滤掉临时邮箱分组（已有独立页面管理）
-            const filteredGroups = groups.filter(g => g.name !== '临时邮箱');
+            const filteredGroups = groups.filter(g => !isTempMailboxGroup(g));
 
             if (filteredGroups.length === 0) {
                 container.innerHTML = `
@@ -110,16 +113,19 @@
 
             // 检查是否是临时邮箱分组
             const group = groups.find(g => g.id === groupId);
-            isTempEmailGroup = group && group.name === '临时邮箱';
+            isTempEmailGroup = Boolean(group && isTempMailboxGroup(group));
 
             // 更新分组列表 UI
             document.querySelectorAll('.group-item').forEach(item => {
                 item.classList.toggle('active', parseInt(item.dataset.groupId) === groupId);
             });
+            if (typeof renderCompactGroupStrip === 'function') {
+                renderCompactGroupStrip(groups, groupId);
+            }
 
             // 更新邮箱面板标题
             if (group) {
-                document.getElementById('currentGroupName').textContent = group.name;
+                document.getElementById('currentGroupName').textContent = formatGroupDisplayName(group.name);
                 document.getElementById('currentGroupColor').style.backgroundColor = group.color || '#666';
 
                 // 更新导入邮箱时的默认分组
@@ -163,12 +169,18 @@
             // 如果有缓存且不强制刷新，直接使用缓存
             if (!forceRefresh && accountsCache[groupId]) {
                 renderAccountList(accountsCache[groupId]);
+                if (typeof renderCompactAccountList === 'function') {
+                    renderCompactAccountList(accountsCache[groupId]);
+                }
                 return;
             }
 
             // forceRefresh 时不显示 loading（保持旧内容，静默刷新）
             if (!forceRefresh) {
                 container.innerHTML = `<div class="loading-overlay"><span class="spinner"></span> ${translateAppTextLocal('加载中…')}</div>`;
+                if (typeof renderCompactLoadingState === 'function') {
+                    renderCompactLoadingState(translateAppTextLocal('加载中…'));
+                }
             }
 
             try {
@@ -179,6 +191,9 @@
                     // 缓存数据
                     accountsCache[groupId] = data.accounts;
                     renderAccountList(data.accounts);
+                    if (typeof renderCompactAccountList === 'function') {
+                        renderCompactAccountList(data.accounts);
+                    }
                     // 恢复滚动位置
                     if (forceRefresh) {
                         requestAnimationFrame(() => { container.scrollTop = savedScrollTop; });
@@ -186,6 +201,9 @@
                 }
             } catch (error) {
                 container.innerHTML = `<div class="empty-state"><p>${translateAppTextLocal('加载失败')}</p></div>`;
+                if (typeof renderCompactErrorState === 'function') {
+                    renderCompactErrorState(translateAppTextLocal('加载失败'));
+                }
             }
         }
 
@@ -264,7 +282,8 @@
                     <div class="account-card-top">
                         <input type="checkbox" class="account-select-checkbox" value="${acc.id}"
                                ${isChecked ? 'checked' : ''}
-                               onclick="event.stopPropagation(); updateBatchActionBar(); updateSelectAllCheckbox()">
+                               onclick="event.stopPropagation()"
+                               onchange="event.stopPropagation(); handleAccountSelectionChange(${acc.id}, this.checked)">
                         <div class="account-avatar" style="background: linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})">${initial}</div>
                         <div class="account-info">
                             <div class="account-email"
@@ -566,7 +585,9 @@
 
         // 全选/取消全选账号（当前分组）
         function toggleSelectAll() {
-            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const selectAllCheckbox = mailboxViewMode === 'compact'
+                ? document.getElementById('compactSelectAllCheckbox')
+                : document.getElementById('selectAllCheckbox');
 
             if (selectAllCheckbox.checked) {
                 selectAllAccounts();
@@ -577,7 +598,7 @@
 
         // 全选当前分组所有账号
         function selectAllAccounts() {
-            const checkboxes = document.querySelectorAll('.account-select-checkbox');
+            const checkboxes = getActiveAccountCheckboxes();
             checkboxes.forEach(cb => {
                 cb.checked = true;
                 selectedAccountIds.add(parseInt(cb.value));
@@ -588,7 +609,7 @@
 
         // 取消全选当前分组
         function unselectAllAccounts() {
-            const checkboxes = document.querySelectorAll('.account-select-checkbox');
+            const checkboxes = getActiveAccountCheckboxes();
             checkboxes.forEach(cb => {
                 cb.checked = false;
                 selectedAccountIds.delete(parseInt(cb.value));
@@ -599,37 +620,139 @@
 
         // 更新全选复选框状态（基于当前分组）
         function updateSelectAllCheckbox() {
-            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-            const checkboxes = document.querySelectorAll('.account-select-checkbox');
-            const checkedCount = document.querySelectorAll('.account-select-checkbox:checked').length;
+            const checkboxes = getActiveAccountCheckboxes();
+            const checkedCount = checkboxes.filter(cb => cb.checked).length;
+            const selectAllCheckboxes = [
+                document.getElementById('selectAllCheckbox'),
+                document.getElementById('compactSelectAllCheckbox')
+            ].filter(Boolean);
 
-            if (checkboxes.length === 0) {
-                // 当前分组没有账号，但如果其他分组有选中则显示半选
-                selectAllCheckbox.checked = false;
-                selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-            } else if (checkedCount === 0) {
-                selectAllCheckbox.checked = false;
-                selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-            } else if (checkedCount === checkboxes.length) {
-                selectAllCheckbox.checked = true;
-                selectAllCheckbox.indeterminate = false;
-            } else {
-                selectAllCheckbox.checked = false;
-                selectAllCheckbox.indeterminate = true;
-            }
+            selectAllCheckboxes.forEach(selectAllCheckbox => {
+                if (checkboxes.length === 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
+                } else if (checkedCount === 0) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
+                } else if (checkedCount === checkboxes.length) {
+                    selectAllCheckbox.checked = true;
+                    selectAllCheckbox.indeterminate = false;
+                } else {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = true;
+                }
+            });
         }
 
         // ==================== 验证码复制功能 ====================
 
-        // 复制验证信息到剪贴板
-        let copyVerificationInProgress = false; // 防重复点击
-
-        async function copyVerificationInfo(email, buttonElement) {
-            // 防止重复点击
-            if (copyVerificationInProgress) {
+        function rerenderAccountCaches() {
+            if (!Array.isArray(accountsCache[currentGroupId])) {
                 return;
             }
-            copyVerificationInProgress = true;
+
+            renderAccountList(applyFiltersAndSort(accountsCache[currentGroupId]));
+            if (typeof renderCompactAccountList === 'function') {
+                renderCompactAccountList(accountsCache[currentGroupId]);
+            }
+            if (typeof renderCompactGroupStrip === 'function') {
+                renderCompactGroupStrip(groups, currentGroupId);
+            }
+            updateSelectAllCheckbox();
+            updateBatchActionBar();
+        }
+
+        function syncAccountSummaryToAccountCache(email, accountSummary) {
+            const normalizedEmail = String(email || '').trim().toLowerCase();
+            if (!normalizedEmail || !accountSummary || typeof accountSummary !== 'object') {
+                return false;
+            }
+
+            let updated = false;
+            Object.values(accountsCache).forEach(accounts => {
+                if (!Array.isArray(accounts)) {
+                    return;
+                }
+
+                accounts.forEach(account => {
+                    if (!account || String(account.email || '').trim().toLowerCase() !== normalizedEmail) {
+                        return;
+                    }
+
+                    account.latest_email_subject = String(accountSummary.latest_email_subject || '');
+                    account.latest_email_from = String(accountSummary.latest_email_from || '');
+                    account.latest_email_folder = String(accountSummary.latest_email_folder || '');
+                    account.latest_email_received_at = String(accountSummary.latest_email_received_at || '');
+                    account.latest_verification_code = String(accountSummary.latest_verification_code || '');
+                    account.latest_verification_folder = String(accountSummary.latest_verification_folder || '');
+                    account.latest_verification_received_at = String(accountSummary.latest_verification_received_at || '');
+                    updated = true;
+                });
+            });
+
+            if (updated) {
+                rerenderAccountCaches();
+            }
+
+            return updated;
+        }
+
+        function syncExtractedVerificationToAccountCache(email, verificationData, accountSummary = null) {
+            if (syncAccountSummaryToAccountCache(email, accountSummary)) {
+                return true;
+            }
+
+            const normalizedEmail = String(email || '').trim().toLowerCase();
+            const verificationCode = String(
+                verificationData?.verification_code || verificationData?.verificationCode || ''
+            ).trim();
+
+            if (!normalizedEmail || !verificationCode) {
+                return false;
+            }
+
+            let updated = false;
+            Object.values(accountsCache).forEach(accounts => {
+                if (!Array.isArray(accounts)) {
+                    return;
+                }
+
+                accounts.forEach(account => {
+                    if (!account || String(account.email || '').trim().toLowerCase() !== normalizedEmail) {
+                        return;
+                    }
+
+                    account.latest_verification_code = verificationCode;
+                    if (verificationData?.folder) {
+                        account.latest_verification_folder = String(verificationData.folder);
+                    }
+                    if (verificationData?.received_at) {
+                        account.latest_verification_received_at = String(verificationData.received_at);
+                    }
+                    if (verificationData?.subject && !account.latest_email_subject) {
+                        account.latest_email_subject = String(verificationData.subject);
+                    }
+                    updated = true;
+                });
+            });
+
+            if (!updated) {
+                return false;
+            }
+            rerenderAccountCaches();
+
+            return true;
+        }
+
+        // 复制验证信息到剪贴板
+        const verificationCopyInFlight = new Set();
+
+        async function copyVerificationInfo(email, buttonElement) {
+            const requestKey = String(email || '').trim().toLowerCase();
+            if (!requestKey || verificationCopyInFlight.has(requestKey)) {
+                return;
+            }
+            verificationCopyInFlight.add(requestKey);
 
             // 禁用按钮并显示加载状态
             const originalContent = buttonElement.innerHTML;
@@ -644,6 +767,7 @@
 
                 if (data.success && data.data && data.data.formatted) {
                     await copyToClipboard(data.data.formatted);
+                    syncExtractedVerificationToAccountCache(email, data.data, data.account_summary || null);
                     showToast(
                         getUiLanguage() === 'en'
                             ? `Copied: ${data.data.formatted}`
@@ -669,7 +793,7 @@
                 buttonElement.innerHTML = '❌';
                 buttonElement.style.opacity = '1';
             } finally {
-                copyVerificationInProgress = false;
+                verificationCopyInFlight.delete(requestKey);
                 // 延迟恢复按钮状态
                 setTimeout(() => {
                     buttonElement.disabled = false;

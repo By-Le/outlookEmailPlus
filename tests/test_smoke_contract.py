@@ -48,6 +48,13 @@ class SmokeContractTests(unittest.TestCase):
         self.assertIn("js/main.js", html)
         self.assertIn("js/features/groups.js", html)
         self.assertIn("js/features/accounts.js", html)
+        self.assertIn("js/features/mailbox_compact.js", html)
+        self.assertNotIn("js/layout-manager.js", html)
+        self.assertNotIn("js/layout-bootstrap.js", html)
+        self.assertNotIn("js/state-manager.js", html)
+        self.assertNotIn("css/layout.css", html)
+        self.assertIn('id="toast-container"', html)
+        self.assertNotIn('id="toast"', html)
 
     def test_static_asset_is_accessible(self):
         client = self.app.test_client()
@@ -70,6 +77,11 @@ class SmokeContractTests(unittest.TestCase):
         resp = client.get("/static/js/features/groups.js")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("loadGroups", resp.get_data(as_text=True))
+        resp.close()
+
+        resp = client.get("/static/js/features/mailbox_compact.js")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("switchMailboxViewMode", resp.get_data(as_text=True))
         resp.close()
 
     def test_contract_sampled_endpoints_after_login(self):

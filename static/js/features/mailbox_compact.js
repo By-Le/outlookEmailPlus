@@ -281,7 +281,7 @@
                                 <details class="action-menu">
                                     <summary class="menu-button" aria-label="${escapeHtml(translateCompactText('更多操作'))}" title="${escapeHtml(translateCompactText('更多操作'))}">⋯</summary>
                                     <div class="menu-panel">
-                                        <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); showAccountRemarkModal(${account.id}, '${escapeJs(account.email)}', '${escapeJs(account.remark || '')}', ${account.group_id || 'null'})">${escapeHtml(translateCompactText('编辑备注'))}</button>
+                                        <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); showEditAccountModal(${account.id})">${escapeHtml(translateCompactText('编辑账号'))}</button>
                                         <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); openCompactSingleTagModal(${account.id})">${escapeHtml(translateCompactText('打标签'))}</button>
                                         <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); openCompactSingleMoveGroupModal(${account.id})">${escapeHtml(translateCompactText('移动分组'))}</button>
                                         <button class="menu-item danger" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); deleteAccount(${account.id}, '${escapeJs(account.email)}')">${escapeHtml(translateCompactText('删除账号'))}</button>

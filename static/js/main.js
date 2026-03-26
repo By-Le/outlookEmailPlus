@@ -17,6 +17,7 @@
         let hasMoreEmails = true;
         let currentSkip = 0;
         let lastRefreshTime = null;
+        let mailboxViewMode = localStorage.getItem('ol_mailbox_view_mode') || 'standard';
 
         // 缓存与信任模式
         let emailListCache = {};
@@ -273,6 +274,37 @@
             return window.translateAppText ? window.translateAppText(text) : text;
         }
 
+        function formatGroupDisplayName(name) {
+            return translateAppTextLocal(String(name || '').trim());
+        }
+
+        function formatGroupDescription(description, fallback = '未填写说明') {
+            const rawDescription = String(description || '').trim();
+            return translateAppTextLocal(rawDescription || fallback);
+        }
+
+        function isTempMailboxGroup(groupOrName) {
+            const rawName = typeof groupOrName === 'string'
+                ? String(groupOrName || '').trim()
+                : String(groupOrName?.name || '').trim();
+            return rawName === '临时邮箱' || rawName === 'Temp Mailboxes' || rawName === 'Temp Mailbox';
+        }
+
+        function formatAccountStatusLabel(status) {
+            const normalized = String(status || 'active').trim().toLowerCase();
+            const zhStatusMap = {
+                active: '正常',
+                inactive: '停用',
+                disabled: '停用',
+                paused: '停用'
+            };
+            return translateAppTextLocal(zhStatusMap[normalized] || normalized || '正常');
+        }
+
+        function formatSelectedItemsLabel(count) {
+            return getUiLanguage() === 'en' ? `${count} selected` : `已选 ${count} 项`;
+        }
+
         const pickApiMessage = (payload, fallbackZh, fallbackEn) => (
             window.pickApiMessage ? window.pickApiMessage(payload, fallbackZh, fallbackEn) : (fallbackZh || fallbackEn || '')
         );
@@ -361,6 +393,11 @@
             applyTheme(current === 'dark' ? 'light' : 'dark');
         }
 
+        function applyAccountPanelDensityClasses(panel, width) {
+            panel.classList.toggle('is-narrow', width < 240);
+            panel.classList.toggle('is-compact', width < 170);
+        }
+
         function navigate(page) {
             currentPage = page;
             // Hide all pages
@@ -386,6 +423,9 @@
                 } else if (currentGroupId) {
                     loadAccountsByGroup(currentGroupId);
                 }
+                if (typeof switchMailboxViewMode === 'function') {
+                    switchMailboxViewMode(mailboxViewMode);
+                }
                 syncAccountPanelDensityIfVisible();
                 scheduleAccountPanelDensitySync();
             }
@@ -399,6 +439,7 @@
             const titleEl = document.getElementById('topbarTitle');
             const subtitleEl = document.getElementById('topbarSubtitle');
             const actionsEl = document.getElementById('topbar-actions');
+            const mailboxViewModeTemplate = document.getElementById('mailboxViewModeSwitcherTemplate');
             const titles = {
                 'dashboard': ['仪表盘', '系统概览'],
                 'mailbox': ['账号管理', '管理邮箱账号与查看邮件'],
@@ -412,12 +453,32 @@
             if (subtitleEl) subtitleEl.textContent = translateAppTextLocal(t[1]);
             // Context actions
             if (actionsEl) {
+                actionsEl.classList.remove('topbar-actions-compact');
                 if (page === 'mailbox') {
-                    actionsEl.innerHTML = `
-                        <button class="btn btn-sm btn-ghost" onclick="showExportModal()">📤 导出</button>
-                        <button class="btn btn-sm btn-success" onclick="showRefreshModal()">🔄 全量刷新 Token</button>
-                        <button class="btn btn-sm btn-primary" onclick="showAddAccountModal()">＋ 添加账号</button>
+                    const switcherHtml = mailboxViewModeTemplate ? mailboxViewModeTemplate.innerHTML.trim() : '';
+                    const isCompactMode = mailboxViewMode === 'compact';
+                    actionsEl.innerHTML = isCompactMode ? `
+                        ${switcherHtml}
+                    ` : `
+                        ${switcherHtml}
+                        <button class="btn-inline primary" onclick="showAddAccountModal()">＋ 添加账号</button>
+                        <button class="btn-inline ghost" onclick="showExportModal()">📤 导出</button>
+                        <button class="btn-inline ghost" onclick="showRefreshModal()">🔄 全量刷新 Token</button>
                     `;
+                    actionsEl.classList.toggle('topbar-actions-compact', isCompactMode);
+                    if (subtitleEl) {
+                        subtitleEl.textContent = translateAppTextLocal(
+                            isCompactMode ? '按分组查看账号摘要与验证码' : '管理邮箱账号与查看邮件'
+                        );
+                    }
+                    const standardBtn = document.getElementById('mailboxStandardModeBtn');
+                    const compactBtn = document.getElementById('mailboxCompactModeBtn');
+                    if (standardBtn) {
+                        standardBtn.classList.toggle('active', mailboxViewMode === 'standard');
+                    }
+                    if (compactBtn) {
+                        compactBtn.classList.toggle('active', mailboxViewMode === 'compact');
+                    }
                 } else if (page === 'temp-emails') {
                     actionsEl.innerHTML = `
                         <button class="btn btn-sm btn-primary" onclick="generateTempEmail()">＋ 创建邮箱</button>
@@ -560,8 +621,7 @@
             const panel = document.getElementById('accountPanel');
             if (!panel) return;
             const width = panel.getBoundingClientRect().width;
-            panel.classList.toggle('is-narrow', width < 240);
-            panel.classList.toggle('is-compact', width < 170);
+            applyAccountPanelDensityClasses(panel, width);
         }
 
         function syncAccountPanelDensityIfVisible() {
@@ -576,8 +636,7 @@
                 return false;
             }
 
-            panel.classList.toggle('is-narrow', width < 240);
-            panel.classList.toggle('is-compact', width < 170);
+            applyAccountPanelDensityClasses(panel, width);
             return true;
         }
 
@@ -2327,13 +2386,13 @@ ${details}
             const refreshAllBtn = document.getElementById('refreshAllBtn');
             if (refreshAllBtn) {
                 refreshAllBtn.disabled = false;
-                refreshAllBtn.textContent = '🔄 全量刷新';
+                refreshAllBtn.textContent = translateAppTextLocal('🔄 全量刷新');
             }
 
             const retryFailedBtn = document.getElementById('retryFailedBtn');
             if (retryFailedBtn) {
                 retryFailedBtn.disabled = false;
-                retryFailedBtn.textContent = '🔁 重试失败';
+                retryFailedBtn.textContent = translateAppTextLocal('🔁 重试失败');
             }
         }
 
@@ -3002,30 +3061,50 @@ ${details}
 
         // 全局选中的账号 ID 集合（跨分组保持）
         let selectedAccountIds = new Set();
+        let batchMoveGroupContext = { scopedAccountIds: null };
+
+        function getActiveAccountCheckboxes() {
+            const selector = mailboxViewMode === 'compact'
+                ? '#compactAccountList .account-select-checkbox'
+                : '#accountList .account-select-checkbox';
+            return Array.from(document.querySelectorAll(selector));
+        }
+
+        function handleAccountSelectionChange(accountId, checked) {
+            if (checked) {
+                selectedAccountIds.add(accountId);
+            } else {
+                selectedAccountIds.delete(accountId);
+            }
+            updateBatchActionBar();
+            updateSelectAllCheckbox();
+        }
 
         // 更新批量操作栏状态
         function updateBatchActionBar() {
-            // 同步 DOM 复选框状态到全局 Set
-            const allCheckboxes = document.querySelectorAll('.account-select-checkbox');
-            allCheckboxes.forEach(cb => {
-                const id = parseInt(cb.value);
-                if (cb.checked) {
-                    selectedAccountIds.add(id);
+            const barConfigs = [
+                { barId: 'batchActionBar', countId: 'selectedCount', active: mailboxViewMode === 'standard' },
+                { barId: 'compactBatchActionBar', countId: 'compactSelectedCount', active: mailboxViewMode === 'compact' }
+            ];
+
+            barConfigs.forEach(config => {
+                const bar = document.getElementById(config.barId);
+                const countSpan = document.getElementById(config.countId);
+                if (!bar || !countSpan) return;
+
+                if (selectedAccountIds.size > 0 && config.active) {
+                    bar.style.display = 'flex';
+                    countSpan.textContent = formatSelectedItemsLabel(selectedAccountIds.size);
                 } else {
-                    selectedAccountIds.delete(id);
+                    bar.style.display = 'none';
                 }
             });
-
-            const bar = document.getElementById('batchActionBar');
-            const countSpan = document.getElementById('selectedCount');
-
-            if (selectedAccountIds.size > 0) {
-                bar.style.display = 'flex';
-                countSpan.textContent = `已选 ${selectedAccountIds.size} 项`;
-            } else {
-                bar.style.display = 'none';
-            }
         }
+
+        window.addEventListener('ui-language-changed', () => {
+            updateTopbar(currentPage);
+            updateBatchActionBar();
+        });
 
         // 显示批量删除确认
         function showBatchDeleteConfirm() {
@@ -3077,10 +3156,16 @@ ${details}
         }
 
         let batchActionType = ''; // 'add' or 'remove'
+        let batchTagContext = { scopedAccountIds: null };
 
         // 显示批量打标模态框
-        async function showBatchTagModal(type) {
+        async function showBatchTagModal(type, options = {}) {
             batchActionType = type;
+            batchTagContext = {
+                scopedAccountIds: Array.isArray(options.scopedAccountIds) && options.scopedAccountIds.length > 0
+                    ? [...options.scopedAccountIds]
+                    : null
+            };
             document.getElementById('batchTagTitle').textContent = translateAppTextLocal(type === 'add' ? '批量添加标签' : '批量移除标签');
             document.getElementById('batchTagModal').classList.add('show');
 
@@ -3090,6 +3175,7 @@ ${details}
 
         function hideBatchTagModal() {
             document.getElementById('batchTagModal').classList.remove('show');
+            batchTagContext = { scopedAccountIds: null };
         }
 
         // 加载标签到下拉框
@@ -3120,11 +3206,12 @@ ${details}
                 return;
             }
 
-            const accountIds = Array.from(selectedAccountIds);
+            const accountIds = batchTagContext.scopedAccountIds ? [...batchTagContext.scopedAccountIds] : Array.from(selectedAccountIds);
 
             if (accountIds.length === 0) return;
 
             try {
+                const hasScopedAccountIds = Boolean(batchTagContext.scopedAccountIds);
                 const response = await fetch('/api/accounts/tags', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3139,8 +3226,9 @@ ${details}
                 if (data.success) {
                     showToast(pickApiMessage(data, data.message, 'Tag update completed'), 'success');
                     hideBatchTagModal();
-                    // 清空选中状态
-                    selectedAccountIds.clear();
+                    if (!hasScopedAccountIds) {
+                        selectedAccountIds.clear();
+                    }
                     // 刷新列表
                     loadGroups();
                     if (currentGroupId) {
@@ -3159,13 +3247,19 @@ ${details}
         // ==================== 批量移动分组 ====================
 
         // 显示批量移动分组模态框
-        async function showBatchMoveGroupModal() {
+        async function showBatchMoveGroupModal(options = {}) {
+            batchMoveGroupContext = {
+                scopedAccountIds: Array.isArray(options.scopedAccountIds) && options.scopedAccountIds.length > 0
+                    ? [...options.scopedAccountIds]
+                    : null
+            };
             document.getElementById('batchMoveGroupModal').classList.add('show');
             await loadGroupsForBatchMove();
         }
 
         function hideBatchMoveGroupModal() {
             document.getElementById('batchMoveGroupModal').classList.remove('show');
+            batchMoveGroupContext = { scopedAccountIds: null };
         }
 
         // 加载分组到下拉框
@@ -3196,11 +3290,14 @@ ${details}
                 return;
             }
 
-            const accountIds = Array.from(selectedAccountIds);
+            const accountIds = batchMoveGroupContext.scopedAccountIds
+                ? [...batchMoveGroupContext.scopedAccountIds]
+                : Array.from(selectedAccountIds);
 
             if (accountIds.length === 0) return;
 
             try {
+                const hasScopedAccountIds = Boolean(batchMoveGroupContext.scopedAccountIds);
                 const response = await fetch('/api/accounts/batch-update-group', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3214,8 +3311,9 @@ ${details}
                 if (data.success) {
                     showToast(pickApiMessage(data, data.message, 'Accounts moved successfully'), 'success');
                     hideBatchMoveGroupModal();
-                    // 清空选中状态
-                    selectedAccountIds.clear();
+                    if (!hasScopedAccountIds) {
+                        selectedAccountIds.clear();
+                    }
                     // 刷新分组列表
                     loadGroups();
                     // 刷新当前分组的邮箱列表

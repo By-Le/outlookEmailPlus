@@ -366,36 +366,6 @@ def update_account_credentials(account_id: int, **fields) -> bool:
         return False
 
 
-def update_account_remark(account_id: int, remark: str) -> Optional[Dict[str, Any]]:
-    """轻量更新 remark，避免绑定完整账号编辑接口。"""
-    db = get_db()
-    try:
-        existing = db.execute(
-            "SELECT id FROM accounts WHERE id = ?",
-            (account_id,),
-        ).fetchone()
-        if not existing:
-            return None
-
-        db.execute(
-            """
-            UPDATE accounts
-            SET remark = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (remark, account_id),
-        )
-        db.commit()
-
-        row = db.execute(
-            "SELECT id, remark, updated_at FROM accounts WHERE id = ?",
-            (account_id,),
-        ).fetchone()
-        return dict(row) if row else None
-    except Exception:
-        return False
-
-
 def get_account_compact_summary(account_id: int) -> Optional[Dict[str, str]]:
     db = get_db()
     fields_sql = ", ".join(COMPACT_SUMMARY_FIELDS)

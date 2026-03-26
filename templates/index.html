@@ -144,7 +144,14 @@
 
             <!-- ===== Page: Mailbox (3-column) ===== -->
             <div class="page page-hidden page-no-padding page-workspace" id="page-mailbox">
-                <div class="workspace workspace-mailbox" data-workspace="mailbox">
+                <template id="mailboxViewModeSwitcherTemplate">
+                    <div id="mailboxViewModeSwitcher" class="mailbox-view-switcher mode-switch">
+                        <button class="mode-pill active" id="mailboxStandardModeBtn" onclick="switchMailboxViewMode('standard')">标准模式</button>
+                        <button class="mode-pill" id="mailboxCompactModeBtn" onclick="switchMailboxViewMode('compact')">简洁模式</button>
+                    </div>
+                </template>
+
+                <div class="workspace workspace-mailbox" id="mailboxStandardLayout" data-workspace="mailbox">
                     <!-- Groups Column -->
                     <div class="workspace-panel groups-column" id="groupPanel">
                         <div class="column-header">
@@ -239,7 +246,6 @@
                             <div style="flex:1;"></div>
                             <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">🗑️ 删除</button>
                         </div>
-                        <!-- Email Detail (inline below email list) -->
                         <div id="emailDetailSection" style="display:none;border-top:1px solid var(--border);">
                             <div class="email-detail-toolbar" id="emailDetailToolbar">
                                 <button class="btn btn-sm btn-ghost" onclick="showEmailList()">← 返回</button>
@@ -257,6 +263,53 @@
                                     <span class="empty-icon">📄</span>
                                     <p>选择一封邮件查看详情</p>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mailboxCompactLayout" class="mailbox-compact-layout" style="display:none;">
+                    <div class="compact-board">
+                        <div class="board-toolbar">
+                            <div class="toolbar-left">
+                                <span id="compactModeSummary" class="toolbar-meta compact-mode-summary">请选择分组</span>
+                            </div>
+                            <div class="toolbar-right">
+                                <button class="btn-inline ghost" onclick="showTagManagementModal()">管理标签</button>
+                                <details class="action-menu">
+                                    <summary class="btn-inline ghost" aria-label="账号操作" title="账号操作">账号操作</summary>
+                                    <div class="menu-panel">
+                                        <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); showAddAccountModal()">添加账号</button>
+                                        <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); showExportModal()">导出账号</button>
+                                        <button class="menu-item" onclick="event.preventDefault(); event.stopPropagation(); closeCompactMenu(this); showRefreshModal()">全量刷新 Token</button>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+
+                        <div id="compactGroupStrip" class="group-strip"></div>
+
+                        <div class="mail-list-wrap">
+                            <div class="mail-head">
+                                <div class="compact-header-cell compact-header-cell-selection">
+                                    <input type="checkbox" id="compactSelectAllCheckbox" onclick="toggleSelectAll()">
+                                </div>
+                                <div class="compact-header-cell">邮箱</div>
+                                <div class="compact-header-cell">验证码</div>
+                                <div class="compact-header-cell">最新邮件</div>
+                                <div class="compact-header-cell">标签</div>
+                                <div class="compact-header-cell compact-header-cell-actions">操作</div>
+                            </div>
+                            <div id="compactAccountList" class="mail-rows"></div>
+                        </div>
+
+                        <div id="compactBatchActionBar" class="batch-bar" style="display:none;">
+                            <span id="compactSelectedCount" class="batch-info">已选 0 项</span>
+                            <div class="batch-actions">
+                                <button class="btn-inline ghost" onclick="showBatchTagModal('add')">打标签</button>
+                                <button class="btn-inline ghost" onclick="showBatchTagModal('remove')">去标签</button>
+                                <button class="btn-inline" onclick="showBatchMoveGroupModal()">移动分组</button>
+                                <button class="btn-inline primary" onclick="showBatchDeleteConfirm()">删除</button>
                             </div>
                         </div>
                     </div>

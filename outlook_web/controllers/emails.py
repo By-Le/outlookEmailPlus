@@ -13,6 +13,7 @@ from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import groups as groups_repo
 from outlook_web.security.auth import api_key_required, login_required
 from outlook_web.security.external_api_guard import external_api_guards
+from outlook_web.services import account_compact_summary as compact_summary_service
 from outlook_web.services import email_delete as email_delete_service
 from outlook_web.services import external_api as external_api_service
 from outlook_web.services import graph as graph_service
@@ -67,6 +68,12 @@ def api_get_emails(email_addr: str) -> Any:
             skip=skip,
             top=top,
         )
+        if result.get("success"):
+            result["account_summary"] = compact_summary_service.update_summary_from_message_list(
+                int(account["id"]),
+                result.get("emails") or [],
+                folder=folder,
+            )
         return jsonify(result)
 
     # 获取分组代理设置
@@ -83,6 +90,11 @@ def api_get_emails(email_addr: str) -> Any:
     graph_result = graph_service.get_emails_graph(account["client_id"], account["refresh_token"], folder, skip, top, proxy_url)
     if graph_result.get("success"):
         emails = graph_result.get("emails", [])
+        account_summary = compact_summary_service.update_summary_from_message_list(
+            int(account["id"]),
+            emails,
+            folder=folder,
+        )
         # 更新刷新时间
         db = get_db()
         db.execute(
@@ -116,6 +128,7 @@ def api_get_emails(email_addr: str) -> Any:
                 "emails": formatted,
                 "method": "Graph API",
                 "has_more": len(formatted) >= top,
+                "account_summary": account_summary,
             }
         )
     else:
@@ -147,12 +160,18 @@ def api_get_emails(email_addr: str) -> Any:
         IMAP_SERVER_NEW,
     )
     if imap_new_result.get("success"):
+        account_summary = compact_summary_service.update_summary_from_message_list(
+            int(account["id"]),
+            imap_new_result.get("emails", []),
+            folder=folder,
+        )
         return jsonify(
             {
                 "success": True,
                 "emails": imap_new_result.get("emails", []),
                 "method": "IMAP (New)",
                 "has_more": False,  # IMAP 分页暂未完全实现
+                "account_summary": account_summary,
             }
         )
     else:
@@ -169,12 +188,18 @@ def api_get_emails(email_addr: str) -> Any:
         IMAP_SERVER_OLD,
     )
     if imap_old_result.get("success"):
+        account_summary = compact_summary_service.update_summary_from_message_list(
+            int(account["id"]),
+            imap_old_result.get("emails", []),
+            folder=folder,
+        )
         return jsonify(
             {
                 "success": True,
                 "emails": imap_old_result.get("emails", []),
                 "method": "IMAP (Old)",
                 "has_more": False,
+                "account_summary": account_summary,
             }
         )
     else:
@@ -425,7 +450,22 @@ def api_extract_verification(email_addr: str) -> Any:
 
         try:
             result = extract_verification_info(email_obj)
-            return jsonify({"success": True, "data": result, "message": "提取成功"})
+            account_summary = compact_summary_service.update_summary_from_verification(
+                int(account["id"]),
+                message=latest_email,
+                verification_code=str(result.get("verification_code") or ""),
+                folder="inbox",
+            )
+            result.update(
+                {
+                    "email": email_addr,
+                    "subject": latest_email.get("subject", ""),
+                    "from": latest_email.get("from", ""),
+                    "received_at": latest_email.get("date", ""),
+                    "folder": "inbox",
+                }
+            )
+            return jsonify({"success": True, "data": result, "message": "提取成功", "account_summary": account_summary})
         except ValueError as e:
             error_payload = build_error_payload(
                 "VERIFICATION_NOT_FOUND",
@@ -461,7 +501,10 @@ def api_extract_verification(email_addr: str) -> Any:
             proxy_url=proxy_url,
         )
         if inbox_result.get("success"):
-            emails.extend(inbox_result.get("emails", []))
+            for item in inbox_result.get("emails", []):
+                enriched = dict(item)
+                enriched["folder"] = "inbox"
+                emails.append(enriched)
             graph_success = True
     except Exception:
         pass
@@ -477,7 +520,10 @@ def api_extract_verification(email_addr: str) -> Any:
             proxy_url=proxy_url,
         )
         if junk_result.get("success"):
-            emails.extend(junk_result.get("emails", []))
+            for item in junk_result.get("emails", []):
+                enriched = dict(item)
+                enriched["folder"] = "junkemail"
+                emails.append(enriched)
             graph_success = True
     except Exception:
         pass
@@ -496,7 +542,10 @@ def api_extract_verification(email_addr: str) -> Any:
                 server=IMAP_SERVER_NEW,
             )
             if imap_new_result.get("success"):
-                emails.extend(imap_new_result.get("emails", []))
+                for item in imap_new_result.get("emails", []):
+                    enriched = dict(item)
+                    enriched["folder"] = "inbox"
+                    emails.append(enriched)
         except Exception:
             pass
 
@@ -512,7 +561,10 @@ def api_extract_verification(email_addr: str) -> Any:
                 server=IMAP_SERVER_OLD,
             )
             if imap_old_result.get("success"):
-                emails.extend(imap_old_result.get("emails", []))
+                for item in imap_old_result.get("emails", []):
+                    enriched = dict(item)
+                    enriched["folder"] = "inbox"
+                    emails.append(enriched)
         except Exception:
             pass
 
@@ -573,8 +625,29 @@ def api_extract_verification(email_addr: str) -> Any:
     try:
         # 尝试从邮件详情提取验证信息
         result = extract_verification_info(email_obj)
+        matched_folder = latest_email.get("folder", "inbox")
+        received_at = latest_email.get("receivedDateTime", "") or latest_email.get("date", "")
+        sender = latest_email.get("from", {})
+        if isinstance(sender, dict):
+            sender = sender.get("emailAddress", {}).get("address", "") or sender.get("address", "") or ""
 
-        return jsonify({"success": True, "data": result, "message": "提取成功"})
+        account_summary = compact_summary_service.update_summary_from_verification(
+            int(account["id"]),
+            message=latest_email,
+            verification_code=str(result.get("verification_code") or ""),
+            folder=matched_folder,
+        )
+        result.update(
+            {
+                "email": email_addr,
+                "subject": latest_email.get("subject", ""),
+                "from": sender or latest_email.get("from_address", ""),
+                "received_at": received_at,
+                "folder": matched_folder,
+            }
+        )
+
+        return jsonify({"success": True, "data": result, "message": "提取成功", "account_summary": account_summary})
 
     except ValueError as e:
         # 未找到验证信息

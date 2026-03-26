@@ -40,9 +40,7 @@ const localStorage = {
 
 const context = {
   console,
-  window: {
-    addEventListener: function () {},
-  },
+  window: { addEventListener: function () {} },
   document: {
     getElementById(id) { return elements[id] || null; },
   },
@@ -63,13 +61,6 @@ const context = {
 
 vm.createContext(context);
 vm.runInContext(code, context, { filename: filePath });
-
-// Avoid pulling more DOM-dependent render code into this test.
-context.renderCompactGroupStrip = function () {};
-context.renderCompactAccountList = function () {};
-context.updateBatchActionBar = function () {};
-context.updateSelectAllCheckbox = function () {};
-context.renderAccountList = function () {};
 
 if (typeof context.switchMailboxViewMode !== 'function') {
   throw new Error('switchMailboxViewMode is not defined');

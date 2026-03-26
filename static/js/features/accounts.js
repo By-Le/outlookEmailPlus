@@ -236,6 +236,39 @@
             document.getElementById('addAccountModal').classList.remove('show');
         }
 
+        function resolveImportGroupId(rawGroupId) {
+            return Number.isInteger(rawGroupId) && rawGroupId > 0 ? rawGroupId : null;
+        }
+
+        async function refreshMailboxAfterImport(provider, importedGroupId) {
+            await loadGroups();
+
+            if (currentPage !== 'mailbox') {
+                return;
+            }
+
+            if (provider === 'auto') {
+                if (!currentGroupId) {
+                    const firstNormalGroup = groups.find(group => !isTempMailboxGroup(group));
+                    if (firstNormalGroup) {
+                        await selectGroup(firstNormalGroup.id);
+                    }
+                }
+                return;
+            }
+
+            if (!importedGroupId) {
+                if (currentGroupId) {
+                    delete accountsCache[currentGroupId];
+                    await loadAccountsByGroup(currentGroupId, true);
+                }
+                return;
+            }
+
+            delete accountsCache[importedGroupId];
+            await selectGroup(importedGroupId);
+        }
+
         // 添加账号
         async function addAccount() {
             const input = document.getElementById('accountInput').value.trim();
@@ -243,6 +276,7 @@
             const providerEl = document.getElementById('accountProvider');
             const provider = providerEl ? (providerEl.value || 'outlook') : 'outlook';
             const addToPool = Boolean(document.getElementById('addToPoolCheckbox')?.checked);
+            const importedGroupId = resolveImportGroupId(groupId);
 
             if (!input) {
                 showToast(translateAppTextLocal('请输入账号信息'), 'error');
@@ -322,18 +356,12 @@
                         if (provider === 'auto') {
                             // auto 模式可能影响多个分组，清除所有缓存
                             for (const key in accountsCache) { delete accountsCache[key]; }
-                        } else {
-                            delete accountsCache[groupId];
+                        } else if (importedGroupId) {
+                            delete accountsCache[importedGroupId];
                         }
                     }
 
-                    // 刷新分组列表（更新数量）
-                    loadGroups();
-
-                    // 如果当前选中的就是这个分组，刷新邮箱列表
-                    if (currentGroupId && currentGroupId === groupId) {
-                        loadAccountsByGroup(groupId, true);
-                    }
+                    await refreshMailboxAfterImport(provider, importedGroupId);
                 } else if (data.summary || Array.isArray(data.errors)) {
                     showToast(buildImportFailureToastMessage(data), 'error', data.error || data);
                 } else {
