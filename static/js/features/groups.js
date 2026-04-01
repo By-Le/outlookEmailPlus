@@ -952,3 +952,13 @@
             }
         }
 
+        // Fix: #accountList 在 i18n skip 列表中，MutationObserver 不会自动翻译。
+        // 切换语言时必须手动重渲染账号列表，否则账号卡片文字保留旧语言（如
+        // Unknown / 16 hours ago 混搭中文）。简洁模式已在 mailbox_compact.js 正确处理，
+        // 此处补全标准模式。
+        window.addEventListener('ui-language-changed', () => {
+            if (accountsCache[currentGroupId]) {
+                renderAccountList(applyFiltersAndSort(accountsCache[currentGroupId]));
+            }
+        });
+
