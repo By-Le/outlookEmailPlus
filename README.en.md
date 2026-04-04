@@ -1,6 +1,6 @@
 # Outlook Email Plus
 
-[中文 README](./README.md)
+[中文 README](./README.md) · [Release Playbook](./RELEASE.md)
 
 OutlookMail Plus is a mailbox manager built for individuals and teams that work heavily with registration flows.
 

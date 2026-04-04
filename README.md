@@ -1,7 +1,6 @@
 # Outlook Email Plus
 
-
-[English](./README.en.md)
+[English](./README.en.md) · [发布流程](./RELEASE.md)
 
 OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
