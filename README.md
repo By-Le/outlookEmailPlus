@@ -256,6 +256,8 @@ ALLOW_LOGIN_PASSWORD_CHANGE=false
 - IMAP
 - APScheduler
 
+友链：https://linux.do
+
 也参考了以下项目的思路：
 
 - [assast/outlookEmail](https://github.com/assast/outlookEmail)
