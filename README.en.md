@@ -19,11 +19,11 @@ In short, OutlookMail Plus is a mailbox manager designed specifically for regist
 ## Demo Site
 
 Demo site: https://gbcoinystsyz.ap-southeast-1.clawcloudrun.com  
-Login password: 12345678
+Login password: `12345678`
 
-There are 10 mailbox accounts provided for demonstration. Please do not delete them individually. Their content is periodically restored or reloaded. Do not treat them as your own accounts.
+The site includes 10 mailbox accounts for demonstration. Data is periodically reset. Please do not delete the demo accounts or use them for personal purposes.
 
-The demo covers most major features in this project, except email push. Telegram push is not enabled there because it requires additional configuration.
+The demo covers most major features in this project, except Telegram push (which requires additional configuration).
 
 ## UI Preview
 
@@ -38,7 +38,15 @@ The repository already includes some screenshots, and more can be added later.
 
 Highlights include:
 
-- current stable version: `v1.11.0`
+- Current stable version: `v1.12.0`
+
+**One-Click Update**
+- Two update methods: Watchtower (recommended) and Docker API self-update (advanced)
+- Automatic GitHub release detection with in-app update banner
+- Full deployment info detection: image tag, local build, Watchtower connectivity, etc.
+- Watchtower "already latest" smart detection (based on Watchtower synchronous behavior)
+- Docker API digest pre-check — skips update when already on latest version
+- Fixed browser caching stale JS files
 
 **Mail Pool Enhancements**
 - Project-scoped claim isolation (PR#27): `claim-random` now accepts a `project_key` parameter; accounts already used under the same `caller_id + project_key` combination are not re-claimed (DB v17)
@@ -61,6 +69,7 @@ Highlights include:
 
 **i18n**
 - Added bilingual translations for temp-mail panel domain hint texts and CF Worker domain sync button
+- Emoji-prefixed text translations, settings tab labels, and connectivity/update status messages
 
 ## Core Capabilities
 
@@ -94,10 +103,9 @@ web_outlook_app.py    Backward-compatible entrypoint
 
 ### Docker Deployment
 
-```bash
-docker pull guangshanshui/outlook-email-plus:v1.11.0
-docker pull guangshanshui/outlook-email-plus:latest
+**Option 1: docker run (quick start)**
 
+```bash
 docker run -d \
   --name outlook-email-plus \
   -p 5000:5000 \
@@ -105,14 +113,77 @@ docker run -d \
   -e SECRET_KEY=your-secret-key-here \
   -e LOGIN_PASSWORD=your-login-password \
   -e ALLOW_LOGIN_PASSWORD_CHANGE=false \
-  guangshanshui/outlook-email-plus:v1.11.0
+  guangshanshui/outlook-email-plus:latest
+```
+
+**Option 2: docker-compose (recommended, includes one-click update)**
+
+Save the following as `docker-compose.yml`, then run `docker-compose up -d`:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/zeropointsix/outlook-email-plus:latest   # Recommended (more stable in some regions)
+    # image: guangshanshui/outlook-email-plus:latest         # Docker Hub alternative
+    container_name: outlook-email-plus
+    restart: unless-stopped
+    ports:
+      - "5001:5000"           # Change to 5000:5000 or any other port
+    env_file:
+      - .env
+    environment:
+      SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env}"
+      # One-click update token: leave empty to use the built-in default;
+      # for production, set a random strong password
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
+      # Docker API self-update (optional, advanced)
+      # ⚠️ Enabling this allows the container to control other containers via Docker API
+      # DOCKER_SELF_UPDATE_ALLOW: "false"
+    volumes:
+      - ./data:/app/data
+      # Docker socket mount (optional, only for Docker API self-update)
+      # ⚠️ Mounting docker.sock grants the container full Docker API access
+      # - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - outlook-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
+    command: --http-api-update --label-enable
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      - outlook-net
+
+networks:
+  outlook-net:
+    driver: bridge
 ```
 
 Notes:
 
-- always mount `data/` to avoid losing the database and runtime data
-- `SECRET_KEY` must stay stable and strong; a random 64-character value is recommended
-- for production deployments, pin an explicit version tag such as `v1.11.0`; keep `latest` for quick evaluation
+- Always mount `data/` to avoid losing the database and runtime data
+- `SECRET_KEY` must stay stable and strong; generate a random 64-char value: `python -c "import secrets; print(secrets.token_hex(32))"`
+- `WATCHTOWER_HTTP_API_TOKEN` **can be left empty** — both app and watchtower will automatically use the same built-in default, making one-click update work out of the box; for production, use a random strong password
+- Once configured, the UI will show an update banner when a new version is detected; click "Update Now" to upgrade
+- One-click update **only works with docker-compose deployment**; `docker run` single-container mode is not supported
+
+**Update Methods**: Watchtower is the default (recommended). To use Docker API self-update (no Watchtower required), you need to:
+1. Uncomment `DOCKER_SELF_UPDATE_ALLOW` and set it to `"true"`
+2. Uncomment the docker.sock volume mount
+3. Switch "Update Method" to "Docker API" in Settings
+4. ⚠️ Please fully understand the security implications before enabling
 
 ### Local Run
 
@@ -150,6 +221,19 @@ python -m unittest discover -s tests -v
   GPTMail service URL
 - `GPTMAIL_API_KEY`
   GPTMail API key for temp-mail capabilities
+
+### One-Click Update
+
+- `WATCHTOWER_HTTP_API_TOKEN`
+  Watchtower API auth token. **Can be left empty** — both app and watchtower automatically use the same built-in default, making it work out of the box; for production, use a random strong password
+- `WATCHTOWER_API_URL`
+  Watchtower API address, default `http://watchtower:8080` (Docker internal network, usually no need to change)
+- `DOCKER_SELF_UPDATE_ALLOW`
+  Whether to enable Docker API self-update, default `false`. ⚠️ Grants container Docker API access when enabled
+- `DOCKER_IMAGE`
+  Current container image name (optional, for deployment info detection)
+
+> **Security Note**: Docker API self-update requires mounting `/var/run/docker.sock`, which grants full Docker API access to the container. For production environments, Watchtower is recommended.
 
 ## Notification Channels
 
