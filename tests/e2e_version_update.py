@@ -9,8 +9,8 @@ E2E 测试: 版本更新检测与一键更新功能
 
 import sys
 import time
-from playwright.sync_api import sync_playwright
 
+from playwright.sync_api import sync_playwright
 
 BASE_URL = "http://127.0.0.1:5000"
 PASSWORD = "admin123"
@@ -74,9 +74,7 @@ def test_version_update_and_telegram_proxy():
 
                 # 截取模拟的 Banner
                 page.screenshot(path="tests/screenshots/e2e_update_banner.png")
-                print(
-                    "    📸 模拟 Banner 截图: tests/screenshots/e2e_update_banner.png"
-                )
+                print("    📸 模拟 Banner 截图: tests/screenshots/e2e_update_banner.png")
                 print("    ✅ Banner 显示逻辑验证成功")
         else:
             print("    ⚠️ 未找到 Banner 元素")
@@ -110,9 +108,7 @@ def test_version_update_and_telegram_proxy():
 
         # 滚动到 Telegram 代理区域
         print("    滚动到 Telegram 代理区域...")
-        page.evaluate(
-            "document.getElementById('telegramProxyUrl')?.scrollIntoView({behavior: 'smooth', block: 'center'})"
-        )
+        page.evaluate("document.getElementById('telegramProxyUrl')?.scrollIntoView({behavior: 'smooth', block: 'center'})")
         time.sleep(0.5)
 
         # 截图当前页面状态

@@ -43,24 +43,12 @@ def main():
         print(f"\nBanner 可见: {visible}")
 
         if visible:
-            msg = page.evaluate(
-                """() => document.getElementById('versionUpdateMsg').innerText"""
-            )
-            pos = page.evaluate(
-                """() => window.getComputedStyle(document.getElementById('versionUpdateBanner')).position"""
-            )
-            top = page.evaluate(
-                """() => document.getElementById('versionUpdateBanner').getBoundingClientRect().top"""
-            )
-            padding = page.evaluate(
-                """() => document.getElementById('app').style.paddingTop"""
-            )
-            btn_text = page.evaluate(
-                """() => document.getElementById('btnTriggerUpdate').textContent"""
-            )
-            btn_disabled = page.evaluate(
-                """() => document.getElementById('btnTriggerUpdate').disabled"""
-            )
+            msg = page.evaluate("""() => document.getElementById('versionUpdateMsg').innerText""")
+            pos = page.evaluate("""() => window.getComputedStyle(document.getElementById('versionUpdateBanner')).position""")
+            top = page.evaluate("""() => document.getElementById('versionUpdateBanner').getBoundingClientRect().top""")
+            padding = page.evaluate("""() => document.getElementById('app').style.paddingTop""")
+            btn_text = page.evaluate("""() => document.getElementById('btnTriggerUpdate').textContent""")
+            btn_disabled = page.evaluate("""() => document.getElementById('btnTriggerUpdate').disabled""")
 
             print(f"  Banner 内容: {msg.strip()}")
             print(f"  position: {pos}")
@@ -73,9 +61,7 @@ def main():
             page.locator("button >> text=忽略").first.click()
             page.wait_for_timeout(500)
             hidden = banner.is_hidden()
-            pad_cleared = page.evaluate(
-                """() => document.getElementById('app').style.paddingTop === ''"""
-            )
+            pad_cleared = page.evaluate("""() => document.getElementById('app').style.paddingTop === ''""")
             print(f"  Banner 隐藏: {hidden}")
             print(f"  paddingTop 清除: {pad_cleared}")
             page.screenshot(path="screenshot_test_banner_dismissed.png")

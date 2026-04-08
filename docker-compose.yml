@@ -1,58 +1,58 @@
-version: "3.9"
-
-# ⚠️ 注意：此文件为开发测试用配置，使用本地构建的镜像（outlook-email-dev:latest）
-# Watchtower 对本地构建镜像无法执行自动更新，一键更新功能需使用生产 docker-compose 配置
-# 生产部署请参考 README.md 中的 docker-compose 示例（使用 guangshanshui/outlook-email-plus 镜像）
-
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: outlook-email-dev:latest
-    container_name: outlook-email-dev
+    # 模式一（默认）：直接拉取远端镜像（适合大多数用户）
+    # 镜像标签可通过 .env 的 IMAGE_TAG 控制（默认 latest）
+    image: guangshanshui/outlook-email-plus:${IMAGE_TAG:-latest}
+    # 如需使用 GHCR，可切换为：
+    # image: ghcr.io/zeropointsix/outlook-email-plus:${IMAGE_TAG:-latest}
+
+    # 模式二（开发者）：本地构建（取消注释 build，并按需注释 image）
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    container_name: outlook-email-plus
+
+    # 主机侧端口（默认 5001，避免与本机 5000 冲突）
     ports:
-      - "5001:5000"
+      - "${APP_PORT:-5001}:5000"
+
+    # 从 .env 注入所有环境变量（避免在 compose 里硬编码）
+    env_file:
+      - .env
+
+    # 仅保留"必须项"强校验
     environment:
-      # Flask 核心配置
-      SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY in .env}"
-      LOGIN_PASSWORD: "admin123"
-      ALLOW_LOGIN_PASSWORD_CHANGE: "true"
-
-      # 运行模式
-      FLASK_ENV: "production"
-      SCHEDULER_AUTOSTART: "true"
-
-      # 数据库路径（挂载本地真实数据库）
-      DATABASE_PATH: "/app/data/outlook_accounts.db"
-
-      # 临时邮箱配置（可按需修改）
-      GPTMAIL_BASE_URL: "https://mail.chatgpt.org.uk"
-      GPTMAIL_API_KEY: "gpt-test"
-
-      # 一键更新配置（应用读取环境变量作为 fallback，优先使用数据库配置）
-      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-}"
-      
-      # Docker API 自更新配置（可选，高级功能）
-      # ⚠️ 警告：启用后容器可通过 Docker API 控制宿主机其他容器，存在安全风险
-      # 仅在需要使用 Docker API 自更新功能时启用（默认 false）
+      SECRET_KEY: "${SECRET_KEY:?请在 .env 中设置 SECRET_KEY（必须稳定，用于加密数据库敏感信息）}"
+      # 一键更新 Token：与下方 watchtower 服务保持一致；留空将使用内置默认值，可直接工作
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
+      # Docker API 自更新（可选，高级功能；需同时取消下方 docker.sock 挂载注释）
       DOCKER_SELF_UPDATE_ALLOW: "${DOCKER_SELF_UPDATE_ALLOW:-false}"
 
     volumes:
-      # 挂载本地真实数据库目录（确保本地 Flask 服务已停止，避免 SQLite 锁冲突）
       - ./data:/app/data
       - ./.runtime:/app/.runtime
-      
       # Docker socket 挂载（可选，仅用于 Docker API 自更新功能）
       # ⚠️ 警告：挂载 docker.sock 会授予容器完全的 Docker API 访问权限，请谨慎使用
-      # 如需使用 Docker API 自更新功能，请取消下面一行的注释
       # - /var/run/docker.sock:/var/run/docker.sock
 
     restart: unless-stopped
 
+    # 防止日志无限增长打满磁盘
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -71,13 +71,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      # Watchtower HTTP API Token（必须配置，否则容器启动失败）
-      # 如果 .env 中未设置 WATCHTOWER_HTTP_API_TOKEN，使用默认的安全随机值
-      # 生产环境请在 .env 中设置强随机 Token
-      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-default-watchtower-token-please-change-in-production}
+      # 与上方 app 服务的 WATCHTOWER_HTTP_API_TOKEN 保持一致；留空均使用同一内置默认值
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}
       - WATCHTOWER_HTTP_API_UPDATE=true
       - WATCHTOWER_CLEANUP=true
-      # 禁用定时轮询，仅通过 HTTP API 触发
+      # 禁用定时轮询，仅通过界面触发更新
       - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
     command: --http-api-update --label-enable
     labels:

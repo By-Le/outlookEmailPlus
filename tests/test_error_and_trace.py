@@ -61,22 +61,16 @@ class ErrorAndTraceTests(unittest.TestCase):
 
     def test_trace_id_can_be_propagated_from_request(self):
         client = self.app.test_client()
-        resp = client.get(
-            "/api/__not_found__", headers={"X-Trace-Id": "trace_from_test"}
-        )
+        resp = client.get("/api/__not_found__", headers={"X-Trace-Id": "trace_from_test"})
         data = resp.get_json()
         self.assertEqual(resp.headers.get("X-Trace-Id"), "trace_from_test")
         self.assertEqual(data["error"].get("trace_id"), "trace_from_test")
 
     def test_sanitize_error_details_masks_tokens(self):
-        sanitized = self.module.sanitize_error_details(
-            'Bearer abcdefg refresh_token=xyz password: "123456"'
-        )
+        sanitized = self.module.sanitize_error_details('Bearer abcdefg refresh_token=xyz password: "123456"')
         self.assertIn("Bearer ***", sanitized)
         self.assertIn("refresh_token=***", sanitized)
-        self.assertIn(
-            '"123456"', 'Bearer abcdefg refresh_token=xyz password: "123456"'
-        )  # sanity
+        self.assertIn('"123456"', 'Bearer abcdefg refresh_token=xyz password: "123456"')  # sanity
         self.assertNotIn("123456", sanitized)
 
     def test_build_error_payload_sanitizes_message_and_details(self):
@@ -272,9 +266,7 @@ class ErrorAndTraceTests(unittest.TestCase):
             from outlook_web.services.scheduler import REFRESH_LOCK_NAME
 
             db = get_db()
-            db.execute(
-                "DELETE FROM distributed_locks WHERE name = ?", (REFRESH_LOCK_NAME,)
-            )
+            db.execute("DELETE FROM distributed_locks WHERE name = ?", (REFRESH_LOCK_NAME,))
             db.execute(
                 """
                 INSERT INTO distributed_locks (name, owner_id, acquired_at, expires_at)
@@ -298,9 +290,7 @@ class ErrorAndTraceTests(unittest.TestCase):
         with self.app.test_request_context("/api/test"):
             from outlook_web.middleware.error_handler import handle_exception
 
-            response, status_code = handle_exception(
-                RuntimeError("database path C:/secret.db exploded")
-            )
+            response, status_code = handle_exception(RuntimeError("database path C:/secret.db exploded"))
 
         self.assertEqual(status_code, 500)
         data = response.get_json()
@@ -311,9 +301,7 @@ class ErrorAndTraceTests(unittest.TestCase):
         login = client.post("/login", json={"password": "testpass123"})
         self.assertEqual(login.status_code, 200)
 
-        resp = client.post(
-            "/api/settings/validate-cron", json={"cron_expression": "0 2 * * *"}
-        )
+        resp = client.post("/api/settings/validate-cron", json={"cron_expression": "0 2 * * *"})
         data = resp.get_json()
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(data.get("success"), True)
@@ -395,9 +383,7 @@ class ErrorAndTraceTests(unittest.TestCase):
         self.assertEqual(data.get("need_verify"), True)
         self.assertIsInstance(data.get("error"), dict)
         self.assertEqual(data["error"].get("code"), "EXPORT_VERIFY_REQUIRED")
-        self.assertEqual(
-            data["error"].get("message_en"), "Additional verification is required"
-        )
+        self.assertEqual(data["error"].get("message_en"), "Additional verification is required")
         self.assertEqual(data["error"].get("status"), 401)
         self.assertTrue(data["error"].get("trace_id"))
 
@@ -520,9 +506,7 @@ class ErrorAndTraceTests(unittest.TestCase):
 
         conn = self.module.create_sqlite_connection()
         try:
-            row = conn.execute(
-                "SELECT id FROM groups WHERE is_system = 1 LIMIT 1"
-            ).fetchone()
+            row = conn.execute("SELECT id FROM groups WHERE is_system = 1 LIMIT 1").fetchone()
             self.assertIsNotNone(row)
             system_group_id = row["id"]
         finally:
@@ -535,9 +519,7 @@ class ErrorAndTraceTests(unittest.TestCase):
         self.assertIsInstance(data.get("error"), dict)
         self.assertEqual(data["error"].get("code"), "SYSTEM_GROUP_PROTECTED")
         self.assertEqual(data["error"].get("status"), 403)
-        self.assertEqual(
-            data["error"].get("message_en"), "System groups cannot be deleted"
-        )
+        self.assertEqual(data["error"].get("message_en"), "System groups cannot be deleted")
 
     def test_account_cannot_be_moved_to_system_group_via_update(self):
         client = self.app.test_client()
@@ -549,9 +531,7 @@ class ErrorAndTraceTests(unittest.TestCase):
 
         conn = self.module.create_sqlite_connection()
         try:
-            system_row = conn.execute(
-                "SELECT id FROM groups WHERE is_system = 1 LIMIT 1"
-            ).fetchone()
+            system_row = conn.execute("SELECT id FROM groups WHERE is_system = 1 LIMIT 1").fetchone()
             self.assertIsNotNone(system_row)
             system_group_id = system_row["id"]
 

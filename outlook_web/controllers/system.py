@@ -84,14 +84,9 @@ def api_system_health() -> Any:
             except Exception:
                 heartbeat_age_seconds = None
 
-        scheduler_enabled = (
-            settings_repo.get_setting("enable_scheduled_refresh", "true").lower()
-            == "true"
-        )
+        scheduler_enabled = settings_repo.get_setting("enable_scheduled_refresh", "true").lower() == "true"
         scheduler_autostart = config.get_scheduler_autostart_default()
-        scheduler_healthy = (heartbeat_age_seconds is not None) and (
-            heartbeat_age_seconds <= 120
-        )
+        scheduler_healthy = (heartbeat_age_seconds is not None) and (heartbeat_age_seconds <= 120)
 
         # 刷新锁/运行中
         lock_row = conn.execute(
@@ -102,9 +97,7 @@ def api_system_health() -> Any:
         """,
             (REFRESH_LOCK_NAME,),
         ).fetchone()
-        locked = bool(
-            lock_row and lock_row["expires_at"] and lock_row["expires_at"] > time.time()
-        )
+        locked = bool(lock_row and lock_row["expires_at"] and lock_row["expires_at"] > time.time())
 
         running_run = conn.execute("""
             SELECT id, trigger_source, started_at, trace_id
@@ -273,12 +266,8 @@ def api_system_upgrade_status() -> Any:
                     "schema_version": schema_version,
                     "target_version": DB_SCHEMA_VERSION,
                     "up_to_date": schema_version >= DB_SCHEMA_VERSION,
-                    "last_upgrade_trace_id": (
-                        last_trace_row["value"] if last_trace_row else ""
-                    ),
-                    "last_upgrade_error": (
-                        last_error_row["value"] if last_error_row else ""
-                    ),
+                    "last_upgrade_trace_id": (last_trace_row["value"] if last_trace_row else ""),
+                    "last_upgrade_error": (last_error_row["value"] if last_error_row else ""),
                     "last_migration": last_migration,
                     "backup_hint": backup_hint,
                 },
@@ -310,9 +299,7 @@ def api_external_health() -> Any:
         }
         if db_ok:
             try:
-                probe_summary = external_api_service.probe_instance_upstream(
-                    cache_ttl_seconds=60
-                )
+                probe_summary = external_api_service.probe_instance_upstream(cache_ttl_seconds=60)
             except Exception:
                 probe_summary = {
                     "upstream_probe_ok": False,
@@ -380,9 +367,7 @@ def api_version_check() -> Any:
     current = APP_VERSION
 
     try:
-        GITHUB_API = (
-            "https://api.github.com/repos/ZeroPointSix/outlookEmailPlus/releases/latest"
-        )
+        GITHUB_API = "https://api.github.com/repos/ZeroPointSix/outlookEmailPlus/releases/latest"
         req = urllib.request.Request(
             GITHUB_API,
             headers={"User-Agent": "outlook-email-plus"},
@@ -431,6 +416,7 @@ def api_trigger_update() -> Any:
     import os
     import urllib.error
     import urllib.request
+
     from flask import request
 
     from outlook_web.security.crypto import decrypt_data, is_encrypted
@@ -443,12 +429,15 @@ def api_trigger_update() -> Any:
     elif update_method == "docker_api":
         return _trigger_docker_api_update()
     else:
-        return jsonify(
-            {
-                "success": False,
-                "message": f"不支持的更新方式: {update_method} (支持: watchtower / docker_api)",
-            }
-        ), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"不支持的更新方式: {update_method} (支持: watchtower / docker_api)",
+                }
+            ),
+            400,
+        )
 
 
 def _trigger_watchtower_update() -> Any:
@@ -463,26 +452,23 @@ def _trigger_watchtower_update() -> Any:
     wt_url_raw = settings_repo.get_setting("watchtower_url", "")
     wt_token_raw = settings_repo.get_setting("watchtower_token", "")
 
-    watchtower_url = (
-        wt_url_raw.strip()
-        if wt_url_raw
-        else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
-    )
+    watchtower_url = wt_url_raw.strip() if wt_url_raw else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
     watchtower_token = ""
     if wt_token_raw:
-        watchtower_token = (
-            decrypt_data(wt_token_raw) if is_encrypted(wt_token_raw) else wt_token_raw
-        )
+        watchtower_token = decrypt_data(wt_token_raw) if is_encrypted(wt_token_raw) else wt_token_raw
     if not watchtower_token:
         watchtower_token = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 
     if not watchtower_token:
-        return jsonify(
-            {
-                "success": False,
-                "message": "Watchtower Token 未配置,请在系统设置 → 一键更新中配置",
-            }
-        ), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Watchtower Token 未配置,请在系统设置 → 一键更新中配置",
+                }
+            ),
+            500,
+        )
 
     try:
         req = urllib.request.Request(
@@ -499,16 +485,17 @@ def _trigger_watchtower_update() -> Any:
         if status == 200:
             return jsonify({"success": True, "message": "更新触发成功,容器即将重启"})
         else:
-            return jsonify(
-                {"success": False, "message": f"Watchtower 返回状态码 {status}"}
-            ), 502
+            return jsonify({"success": False, "message": f"Watchtower 返回状态码 {status}"}), 502
     except urllib.error.URLError as e:
-        return jsonify(
-            {
-                "success": False,
-                "message": f"无法连接 Watchtower ({watchtower_url}): {e.reason}",
-            }
-        ), 503
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"无法连接 Watchtower ({watchtower_url}): {e.reason}",
+                }
+            ),
+            503,
+        )
     except Exception as e:
         return jsonify({"success": False, "message": f"触发更新失败: {str(e)}"}), 500
 
@@ -521,30 +508,38 @@ def _trigger_docker_api_update() -> Any:
     - updater 容器执行真正的更新流程（并在适当时机 stop/rename 旧容器）
     - 主接口尽量快速返回，减少“响应中途被 stop”导致的失败概率
     """
-    import os
     import json
+    import os
+
     from flask import request, session
-    from outlook_web.services import docker_update
+
     from outlook_web.audit import log_audit
+    from outlook_web.services import docker_update
 
     # 检查是否启用 Docker API 自更新
     if not docker_update.is_docker_api_enabled():
-        return jsonify(
-            {
-                "success": False,
-                "message": "Docker API 自更新功能未启用 (需设置环境变量 DOCKER_SELF_UPDATE_ALLOW=true)",
-            }
-        ), 403
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Docker API 自更新功能未启用 (需设置环境变量 DOCKER_SELF_UPDATE_ALLOW=true)",
+                }
+            ),
+            403,
+        )
 
     # 检查 docker.sock 可访问性
     socket_ok, socket_msg = docker_update.check_docker_socket()
     if not socket_ok:
-        return jsonify(
-            {
-                "success": False,
-                "message": socket_msg,
-            }
-        ), 503
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": socket_msg,
+                }
+            ),
+            503,
+        )
 
     # 获取参数
     remove_old = request.args.get("remove_old", "false").lower() == "true"
@@ -617,9 +612,7 @@ def _trigger_docker_api_update() -> Any:
         return jsonify({"success": True, "message": msg})
     except Exception as e:
         logger.error(f"启动 updater 容器失败: {str(e)}", exc_info=True)
-        return jsonify(
-            {"success": False, "message": f"启动 updater 失败: {str(e)}"}
-        ), 500
+        return jsonify({"success": False, "message": f"启动 updater 失败: {str(e)}"}), 500
 
 
 @login_required
@@ -687,9 +680,7 @@ def api_deployment_info() -> Any:
                 docker_image_id = str(cinfo.get("image_id") or "").strip()
                 repo_digests_raw = cinfo.get("image_repo_digests") or []
                 if isinstance(repo_digests_raw, list):
-                    docker_image_repo_digests = [
-                        str(x) for x in repo_digests_raw if str(x).strip()
-                    ]
+                    docker_image_repo_digests = [str(x) for x in repo_digests_raw if str(x).strip()]
     except Exception:
         pass
 
@@ -699,10 +690,7 @@ def api_deployment_info() -> Any:
             with open("/proc/self/cgroup", "r") as f:
                 cgroup_content = f.read()
                 # 简单判断：如果包含 docker 关键字，说明在容器内运行
-                if (
-                    "docker" in cgroup_content.lower()
-                    or "containerd" in cgroup_content.lower()
-                ):
+                if "docker" in cgroup_content.lower() or "containerd" in cgroup_content.lower():
                     # 无法直接从 cgroup 读取镜像名，使用默认值
                     image_name = "outlook-email-plus:unknown"
         except Exception:
@@ -743,11 +731,7 @@ def api_deployment_info() -> Any:
             else:
                 tag = _parse_tag(image_name).lower()
                 # 仅对 tag 做精确判断，避免 latest 被误判
-                if (
-                    tag in ("dev", "local", "test")
-                    or tag.startswith("dev-")
-                    or tag.startswith("local-")
-                ):
+                if tag in ("dev", "local", "test") or tag.startswith("dev-") or tag.startswith("local-"):
                     is_local = True
 
     deployment_info["is_local_build"] = is_local
@@ -767,16 +751,10 @@ def api_deployment_info() -> Any:
     wt_url_raw = settings_repo.get_setting("watchtower_url", "")
     wt_token_raw = settings_repo.get_setting("watchtower_token", "")
 
-    watchtower_url = (
-        wt_url_raw.strip()
-        if wt_url_raw
-        else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
-    )
+    watchtower_url = wt_url_raw.strip() if wt_url_raw else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
     watchtower_token = ""
     if wt_token_raw:
-        watchtower_token = (
-            decrypt_data(wt_token_raw) if is_encrypted(wt_token_raw) else wt_token_raw
-        )
+        watchtower_token = decrypt_data(wt_token_raw) if is_encrypted(wt_token_raw) else wt_token_raw
     if not watchtower_token:
         watchtower_token = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 
@@ -909,19 +887,11 @@ def api_test_watchtower() -> Any:
     # 如果前端没传值，从数据库 / 环境变量读取
     if not wt_url:
         wt_url_raw = settings_repo.get_setting("watchtower_url", "")
-        wt_url = (
-            wt_url_raw.strip()
-            if wt_url_raw
-            else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
-        )
+        wt_url = wt_url_raw.strip() if wt_url_raw else os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
     if not wt_token:
         wt_token_raw = settings_repo.get_setting("watchtower_token", "")
         if wt_token_raw:
-            wt_token = (
-                decrypt_data(wt_token_raw)
-                if is_encrypted(wt_token_raw)
-                else wt_token_raw
-            )
+            wt_token = decrypt_data(wt_token_raw) if is_encrypted(wt_token_raw) else wt_token_raw
         if not wt_token:
             wt_token = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 
@@ -1023,9 +993,7 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": "INVALID_PARAM"},
         )
-        return jsonify(
-            external_api_service.fail("INVALID_PARAM", "email 参数不合法")
-        ), 400
+        return jsonify(external_api_service.fail("INVALID_PARAM", "email 参数不合法")), 400
     try:
         external_api_service.ensure_external_email_scope(email_addr)
     except external_api_service.ExternalApiError as exc:
@@ -1036,9 +1004,7 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": exc.code},
         )
-        return jsonify(
-            external_api_service.fail(exc.code, exc.message, data=exc.data)
-        ), exc.status
+        return jsonify(external_api_service.fail(exc.code, exc.message, data=exc.data)), exc.status
 
     account = accounts_repo.get_account_by_email(email_addr)
     if not account:
@@ -1049,11 +1015,7 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": "ACCOUNT_NOT_FOUND"},
         )
-        return jsonify(
-            external_api_service.fail(
-                "ACCOUNT_NOT_FOUND", "账号不存在", data={"email": email_addr}
-            )
-        ), 404
+        return jsonify(external_api_service.fail("ACCOUNT_NOT_FOUND", "账号不存在", data={"email": email_addr})), 404
 
     account_type = (account.get("account_type") or "outlook").strip().lower()
     provider = (account.get("provider") or account_type or "outlook").strip().lower()

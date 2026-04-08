@@ -121,21 +121,19 @@ docker run -d \
 保存以下内容为 `docker-compose.yml`，然后运行 `docker-compose up -d`：
 
 ```yaml
-version: "3.9"
-
 services:
   app:
     image: guangshanshui/outlook-email-plus:latest
     container_name: outlook-email-plus
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "5001:5000"           # 可改为 5000:5000 或其他端口
+    env_file:
+      - .env
     environment:
-      SECRET_KEY: "your-secret-key-here"        # 必须修改，建议随机64位
-      LOGIN_PASSWORD: "your-login-password"      # 必须修改
-      ALLOW_LOGIN_PASSWORD_CHANGE: "false"
-      SCHEDULER_AUTOSTART: "true"
-      WATCHTOWER_HTTP_API_TOKEN: "your-watchtower-token"  # 与下方 watchtower 服务保持一致
+      SECRET_KEY: "${SECRET_KEY:?请在 .env 中设置 SECRET_KEY}"
+      # 一键更新 Token：留空即可直接使用内置默认值；生产环境建议设为随机强密码
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
       # Docker API 自更新（可选，高级功能）
       # ⚠️ 启用后容器可通过 Docker API 控制宿主机其他容器，存在安全风险
       # DOCKER_SELF_UPDATE_ALLOW: "false"
@@ -143,7 +141,6 @@ services:
       - ./data:/app/data
       # Docker socket 挂载（可选，仅用于 Docker API 自更新功能）
       # ⚠️ 挂载 docker.sock 会授予容器完全的 Docker API 访问权限，请谨慎使用
-      # 如需使用 Docker API 自更新功能，请取消下面一行的注释
       # - /var/run/docker.sock:/var/run/docker.sock
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -157,10 +154,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - WATCHTOWER_HTTP_API_TOKEN=your-watchtower-token   # 与上方 app 服务保持一致
+      # 与上方 app 服务保持一致；留空时两边同步使用内置默认值，无需手动对齐
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}
       - WATCHTOWER_HTTP_API_UPDATE=true
       - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false          # 禁用自动轮询，仅通过界面触发更新
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
     command: --http-api-update --label-enable
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
@@ -176,7 +174,7 @@ networks:
 
 - 建议始终挂载 `data/`，避免数据库与运行数据丢失
 - `SECRET_KEY` 必须稳定且足够强，建议随机64位：`python -c "import secrets; print(secrets.token_hex(32))"`
-- `WATCHTOWER_HTTP_API_TOKEN` 两处填写相同的随机字符串，用于一键更新鉴权
+- `WATCHTOWER_HTTP_API_TOKEN` **可留空**，留空时 app 和 watchtower 自动使用同一内置默认值，部署后一键更新即可使用
 - 配置好后，当有新版本时系统界面会自动弹出更新提示，点击"立即更新"即可完成升级
 - 一键更新功能**仅在 docker-compose 部署方式下有效**；`docker run` 单容器模式不支持
 
@@ -226,9 +224,9 @@ python -m unittest discover -s tests -v
 ### 一键更新相关
 
 - `WATCHTOWER_HTTP_API_TOKEN`
-  Watchtower API 鉴权令牌，与 watchtower 容器配置保持一致
+  Watchtower API 鉴权令牌。**可留空**，留空时 app 和 watchtower 两边自动使用同一内置默认值，开箱即用；生产环境建议设置随机强密码
 - `WATCHTOWER_API_URL`
-  Watchtower API 地址，默认 `http://watchtower:8080`（Docker 内部网络）
+  Watchtower API 地址，默认 `http://watchtower:8080`（Docker 内部网络，通常无需修改）
 - `DOCKER_SELF_UPDATE_ALLOW`
   是否启用 Docker API 自更新功能，默认 `false`。⚠️ 启用后容器可访问 Docker API，存在安全风险
 - `DOCKER_IMAGE`

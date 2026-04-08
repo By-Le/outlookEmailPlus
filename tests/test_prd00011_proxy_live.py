@@ -96,9 +96,7 @@ class TestPRD00011Settings(unittest.TestCase):
         self.assertTrue(resp.get_json().get("success"))
 
         resp2 = self.client.get("/api/settings")
-        saved = (
-            resp2.get_json().get("settings", {}).get("telegram_proxy_url", "MISSING")
-        )
+        saved = resp2.get_json().get("settings", {}).get("telegram_proxy_url", "MISSING")
         self.assertEqual(saved, "", f"清空后期望空字符串，实际 {saved!r}")
 
 

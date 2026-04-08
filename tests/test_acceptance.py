@@ -48,9 +48,7 @@ def main():
         # 监听 console
         page.on(
             "console",
-            lambda msg: print(f"  [CONSOLE] {msg.text}")
-            if msg.type == "error"
-            else None,
+            lambda msg: print(f"  [CONSOLE] {msg.text}") if msg.type == "error" else None,
         )
 
         # ========== Step 1: 登录 ==========

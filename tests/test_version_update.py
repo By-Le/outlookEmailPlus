@@ -235,12 +235,8 @@ class VersionCheckAPITests(unittest.TestCase):
         self.assertIn("release_url", data)
         # 禁止旧字段（精确匹配，不含 current_version/latest_version）
         for key in data:
-            self.assertNotEqual(
-                key, "current", "不应有 current 字段（应为 current_version）"
-            )
-            self.assertNotEqual(
-                key, "latest", "不应有 latest 字段（应为 latest_version）"
-            )
+            self.assertNotEqual(key, "current", "不应有 current 字段（应为 current_version）")
+            self.assertNotEqual(key, "latest", "不应有 latest 字段（应为 latest_version）")
 
     def test_cache_ttl(self):
         """缓存 TTL=600s：第二次请求不调 GitHub API"""
@@ -465,9 +461,7 @@ class TriggerUpdateAPITests(unittest.TestCase):
                 client.post("/api/system/trigger-update")
 
                 req_obj = mock_urlopen.call_args[0][0]
-                self.assertEqual(
-                    req_obj.get_header("Authorization"), "Bearer my-secret-token"
-                )
+                self.assertEqual(req_obj.get_header("Authorization"), "Bearer my-secret-token")
                 self.assertIn("wt:8080/v1/update", req_obj.full_url)
 
     def test_env_var_names(self):

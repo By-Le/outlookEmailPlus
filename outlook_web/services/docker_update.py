@@ -15,10 +15,10 @@
 - 失败时保留旧容器
 """
 
-import os
 import logging
+import os
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,7 @@ def _has_repo_digests(image_id: str) -> Optional[bool]:
         return None
 
 
-def validate_image_for_update(
-    image_ref: str, *, image_id: Optional[str] = None
-) -> Tuple[bool, str]:
+def validate_image_for_update(image_ref: str, *, image_id: Optional[str] = None) -> Tuple[bool, str]:
     """用于“触发更新”链路的镜像校验。
 
     目标：
@@ -281,9 +279,7 @@ def get_container_info(container_id_or_name: str) -> Optional[Dict[str, Any]]:
         }
 
     except Exception as e:
-        logger.error(
-            f"获取容器信息失败 ({container_id_or_name}): {str(e)}", exc_info=True
-        )
+        logger.error(f"获取容器信息失败 ({container_id_or_name}): {str(e)}", exc_info=True)
         return None
 
 
@@ -365,9 +361,7 @@ def spawn_update_helper_container(
             pass
 
         target = client.containers.get(target_container_id)
-        target_image = (
-            target.attrs.get("Config", {}).get("Image", "") if target.attrs else ""
-        )
+        target_image = target.attrs.get("Config", {}).get("Image", "") if target.attrs else ""
         if not target_image:
             return False, "无法获取目标容器镜像信息"
 
@@ -420,9 +414,7 @@ def spawn_update_helper_container(
         if docker_cfg and os.path.exists(docker_cfg):
             helper_volumes[docker_cfg] = {"bind": docker_cfg, "mode": "ro"}
 
-        logger.info(
-            f"启动 updater 容器: name={helper_name}, image={target_image}, target={target_container_id[:12]}"
-        )
+        logger.info(f"启动 updater 容器: name={helper_name}, image={target_image}, target={target_container_id[:12]}")
 
         # detach=True 让请求快速返回；remove/auto_remove 让容器运行完自动清理
         container = client.containers.run(
@@ -841,11 +833,7 @@ def self_update(
         }
 
     # Step 3: 获取当前容器信息（可指定目标容器）
-    current_container = (
-        get_container_info(target_container_id)
-        if target_container_id
-        else get_current_container_info()
-    )
+    current_container = get_container_info(target_container_id) if target_container_id else get_current_container_info()
     if not current_container:
         steps.append(
             {
@@ -1061,9 +1049,7 @@ def self_update(
         logger.warning(f"重命名容器失败: {rename_msg}")
 
     # Step 12: 清理旧容器
-    cleanup_ok, cleanup_msg = cleanup_old_container(
-        current_container["id"], remove=remove_old
-    )
+    cleanup_ok, cleanup_msg = cleanup_old_container(current_container["id"], remove=remove_old)
     steps.append(
         {
             "step": "cleanup_old_container",

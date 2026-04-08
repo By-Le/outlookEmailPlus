@@ -65,9 +65,7 @@ def stream_refresh_all_accounts(
     requested_by_ip: str,
     requested_by_user_agent: str,
     lock_name: str,
-    test_refresh_token: Callable[
-        [str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]
-    ],
+    test_refresh_token: Callable[[str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]],
 ) -> Iterator[str]:
     """刷新所有账号 token（SSE 流式输出）"""
     conn = create_sqlite_connection()
@@ -76,21 +74,13 @@ def stream_refresh_all_accounts(
     run_id = None
 
     try:
-        delay_row = conn.execute(
-            "SELECT value FROM settings WHERE key = 'refresh_delay_seconds'"
-        ).fetchone()
+        delay_row = conn.execute("SELECT value FROM settings WHERE key = 'refresh_delay_seconds'").fetchone()
         delay_seconds = int(delay_row["value"]) if delay_row else 5
 
         try:
-            conn.execute(
-                "DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')"
-            )
-            conn.execute(
-                "DELETE FROM refresh_runs WHERE started_at < datetime('now', '-6 months')"
-            )
-            conn.execute(
-                "DELETE FROM distributed_locks WHERE expires_at < ?", (time.time(),)
-            )
+            conn.execute("DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')")
+            conn.execute("DELETE FROM refresh_runs WHERE started_at < datetime('now', '-6 months')")
+            conn.execute("DELETE FROM distributed_locks WHERE expires_at < ?", (time.time(),))
             conn.commit()
         except Exception:
             pass
@@ -108,13 +98,9 @@ def stream_refresh_all_accounts(
         )
 
         ttl_seconds = compute_refresh_lock_ttl_seconds(total, delay_seconds)
-        ok, lock_info = acquire_distributed_lock(
-            conn, lock_name, lock_owner_id, ttl_seconds
-        )
+        ok, lock_info = acquire_distributed_lock(conn, lock_name, lock_owner_id, ttl_seconds)
         if not ok:
-            finish_refresh_run(
-                conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行"
-            )
+            finish_refresh_run(conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行")
             error_payload = build_error_payload(
                 code="REFRESH_CONFLICT",
                 message="当前已有刷新任务执行中，请稍后再试",
@@ -154,17 +140,11 @@ def stream_refresh_all_accounts(
             encrypted_refresh_token = account["refresh_token"]
 
             try:
-                refresh_token = (
-                    decrypt_data(encrypted_refresh_token)
-                    if encrypted_refresh_token
-                    else encrypted_refresh_token
-                )
+                refresh_token = decrypt_data(encrypted_refresh_token) if encrypted_refresh_token else encrypted_refresh_token
             except Exception as e:
                 failed_count += 1
                 error_msg = f"解密 token 失败: {str(e)}"
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
                 try:
                     conn.execute(
                         """
@@ -205,17 +185,13 @@ def stream_refresh_all_accounts(
             group_id = account["group_id"]
             if group_id:
                 try:
-                    group_row = conn.execute(
-                        "SELECT proxy_url FROM groups WHERE id = ?", (group_id,)
-                    ).fetchone()
+                    group_row = conn.execute("SELECT proxy_url FROM groups WHERE id = ?", (group_id,)).fetchone()
                     if group_row:
                         proxy_url = group_row["proxy_url"] or ""
                 except Exception:
                     proxy_url = ""
 
-            success, error_msg, new_refresh_token = test_refresh_token(
-                client_id, refresh_token, proxy_url
-            )
+            success, error_msg, new_refresh_token = test_refresh_token(client_id, refresh_token, proxy_url)
 
             try:
                 conn.execute(
@@ -234,11 +210,7 @@ def stream_refresh_all_accounts(
                 )
 
                 if success:
-                    if (
-                        isinstance(new_refresh_token, str)
-                        and new_refresh_token.strip()
-                        and new_refresh_token != refresh_token
-                    ):
+                    if isinstance(new_refresh_token, str) and new_refresh_token.strip() and new_refresh_token != refresh_token:
                         conn.execute(
                             """
                             UPDATE accounts
@@ -263,9 +235,7 @@ def stream_refresh_all_accounts(
                 success_count += 1
             else:
                 failed_count += 1
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
 
             if index < total and delay_seconds > 0:
                 yield f"data: {json.dumps({'type': 'delay', 'seconds': delay_seconds}, ensure_ascii=False)}\n\n"
@@ -329,9 +299,7 @@ def stream_trigger_scheduled_refresh(
     requested_by_ip: str,
     requested_by_user_agent: str,
     lock_name: str,
-    test_refresh_token: Callable[
-        [str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]
-    ],
+    test_refresh_token: Callable[[str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]],
 ) -> Iterator[str]:
     """手动触发定时刷新（SSE 流式输出）"""
     conn = create_sqlite_connection()
@@ -343,15 +311,11 @@ def stream_trigger_scheduled_refresh(
     failed_count = 0
 
     try:
-        delay_row = conn.execute(
-            "SELECT value FROM settings WHERE key = 'refresh_delay_seconds'"
-        ).fetchone()
+        delay_row = conn.execute("SELECT value FROM settings WHERE key = 'refresh_delay_seconds'").fetchone()
         delay_seconds = int(delay_row["value"]) if delay_row else 5
 
         try:
-            conn.execute(
-                "DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')"
-            )
+            conn.execute("DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')")
             conn.commit()
         except Exception:
             pass
@@ -413,13 +377,9 @@ def stream_trigger_scheduled_refresh(
                         return
 
         ttl_seconds = compute_refresh_lock_ttl_seconds(total, delay_seconds)
-        ok, lock_info = acquire_distributed_lock(
-            conn, lock_name, lock_owner_id, ttl_seconds
-        )
+        ok, lock_info = acquire_distributed_lock(conn, lock_name, lock_owner_id, ttl_seconds)
         if not ok:
-            finish_refresh_run(
-                conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行"
-            )
+            finish_refresh_run(conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行")
             error_payload = build_error_payload(
                 code="REFRESH_CONFLICT",
                 message="当前已有刷新任务执行中，请稍后再试",
@@ -459,17 +419,11 @@ def stream_trigger_scheduled_refresh(
             encrypted_refresh_token = account["refresh_token"]
 
             try:
-                refresh_token = (
-                    decrypt_data(encrypted_refresh_token)
-                    if encrypted_refresh_token
-                    else encrypted_refresh_token
-                )
+                refresh_token = decrypt_data(encrypted_refresh_token) if encrypted_refresh_token else encrypted_refresh_token
             except Exception as e:
                 failed_count += 1
                 error_msg = f"解密 token 失败: {str(e)}"
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
                 try:
                     conn.execute(
                         """
@@ -509,15 +463,11 @@ def stream_trigger_scheduled_refresh(
             proxy_url = ""
             group_id = account["group_id"]
             if group_id:
-                group_row = conn.execute(
-                    "SELECT proxy_url FROM groups WHERE id = ?", (group_id,)
-                ).fetchone()
+                group_row = conn.execute("SELECT proxy_url FROM groups WHERE id = ?", (group_id,)).fetchone()
                 if group_row:
                     proxy_url = group_row["proxy_url"] or ""
 
-            success, error_msg, new_refresh_token = test_refresh_token(
-                client_id, refresh_token, proxy_url
-            )
+            success, error_msg, new_refresh_token = test_refresh_token(client_id, refresh_token, proxy_url)
 
             try:
                 conn.execute(
@@ -536,11 +486,7 @@ def stream_trigger_scheduled_refresh(
                 )
 
                 if success:
-                    if (
-                        isinstance(new_refresh_token, str)
-                        and new_refresh_token.strip()
-                        and new_refresh_token != refresh_token
-                    ):
+                    if isinstance(new_refresh_token, str) and new_refresh_token.strip() and new_refresh_token != refresh_token:
                         conn.execute(
                             """
                             UPDATE accounts
@@ -566,9 +512,7 @@ def stream_trigger_scheduled_refresh(
                 success_count += 1
             else:
                 failed_count += 1
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
 
             if index < total and delay_seconds > 0:
                 yield f"data: {json.dumps({'type': 'delay', 'seconds': delay_seconds}, ensure_ascii=False)}\n\n"
@@ -602,9 +546,7 @@ def stream_trigger_scheduled_refresh(
     except Exception as e:
         try:
             if run_id:
-                finish_refresh_run(
-                    conn, run_id, "failed", total, success_count, failed_count, str(e)
-                )
+                finish_refresh_run(conn, run_id, "failed", total, success_count, failed_count, str(e))
         except Exception:
             pass
         error_payload = build_error_payload(
@@ -632,9 +574,7 @@ def stream_refresh_selected_accounts(
     requested_by_ip: str,
     requested_by_user_agent: str,
     lock_name: str,
-    test_refresh_token: Callable[
-        [str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]
-    ],
+    test_refresh_token: Callable[[str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]],
 ) -> Iterator[str]:
     """刷新指定账号列表的 token（SSE 流式输出）"""
     conn = create_sqlite_connection()
@@ -643,21 +583,13 @@ def stream_refresh_selected_accounts(
     run_id = None
 
     try:
-        delay_row = conn.execute(
-            "SELECT value FROM settings WHERE key = 'refresh_delay_seconds'"
-        ).fetchone()
+        delay_row = conn.execute("SELECT value FROM settings WHERE key = 'refresh_delay_seconds'").fetchone()
         delay_seconds = int(delay_row["value"]) if delay_row else 5
 
         try:
-            conn.execute(
-                "DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')"
-            )
-            conn.execute(
-                "DELETE FROM refresh_runs WHERE started_at < datetime('now', '-6 months')"
-            )
-            conn.execute(
-                "DELETE FROM distributed_locks WHERE expires_at < ?", (time.time(),)
-            )
+            conn.execute("DELETE FROM account_refresh_logs WHERE created_at < datetime('now', '-6 months')")
+            conn.execute("DELETE FROM refresh_runs WHERE started_at < datetime('now', '-6 months')")
+            conn.execute("DELETE FROM distributed_locks WHERE expires_at < ?", (time.time(),))
             conn.commit()
         except Exception:
             pass
@@ -674,11 +606,7 @@ def stream_refresh_selected_accounts(
             account_ids,
         ).fetchall()
 
-        accounts = [
-            row
-            for row in all_rows
-            if is_refreshable_outlook_account(row["account_type"])
-        ]
+        accounts = [row for row in all_rows if is_refreshable_outlook_account(row["account_type"])]
         skipped_count = len(all_rows) - len(accounts)
         total = len(accounts)
 
@@ -692,13 +620,9 @@ def stream_refresh_selected_accounts(
         )
 
         ttl_seconds = compute_refresh_lock_ttl_seconds(total, delay_seconds)
-        ok, lock_info = acquire_distributed_lock(
-            conn, lock_name, lock_owner_id, ttl_seconds
-        )
+        ok, lock_info = acquire_distributed_lock(conn, lock_name, lock_owner_id, ttl_seconds)
         if not ok:
-            finish_refresh_run(
-                conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行"
-            )
+            finish_refresh_run(conn, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行")
             error_payload = build_error_payload(
                 code="REFRESH_CONFLICT",
                 message="当前已有刷新任务执行中，请稍后再试",
@@ -739,17 +663,11 @@ def stream_refresh_selected_accounts(
             encrypted_refresh_token = account["refresh_token"]
 
             try:
-                refresh_token = (
-                    decrypt_data(encrypted_refresh_token)
-                    if encrypted_refresh_token
-                    else encrypted_refresh_token
-                )
+                refresh_token = decrypt_data(encrypted_refresh_token) if encrypted_refresh_token else encrypted_refresh_token
             except Exception as e:
                 failed_count += 1
                 error_msg = f"解密 token 失败: {str(e)}"
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
                 try:
                     conn.execute(
                         """
@@ -813,17 +731,13 @@ def stream_refresh_selected_accounts(
             group_id = account["group_id"]
             if group_id:
                 try:
-                    group_row = conn.execute(
-                        "SELECT proxy_url FROM groups WHERE id = ?", (group_id,)
-                    ).fetchone()
+                    group_row = conn.execute("SELECT proxy_url FROM groups WHERE id = ?", (group_id,)).fetchone()
                     if group_row:
                         proxy_url = group_row["proxy_url"] or ""
                 except Exception:
                     proxy_url = ""
 
-            success, error_msg, new_refresh_token = test_refresh_token(
-                client_id, refresh_token, proxy_url
-            )
+            success, error_msg, new_refresh_token = test_refresh_token(client_id, refresh_token, proxy_url)
 
             last_refresh_at = None
             try:
@@ -843,11 +757,7 @@ def stream_refresh_selected_accounts(
                 )
 
                 if success:
-                    if (
-                        isinstance(new_refresh_token, str)
-                        and new_refresh_token.strip()
-                        and new_refresh_token != refresh_token
-                    ):
+                    if isinstance(new_refresh_token, str) and new_refresh_token.strip() and new_refresh_token != refresh_token:
                         conn.execute(
                             """
                             UPDATE accounts
@@ -879,9 +789,7 @@ def stream_refresh_selected_accounts(
                 success_count += 1
             else:
                 failed_count += 1
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
 
             # 发送带 account_id 和 result 的完整 progress 事件
             yield (
@@ -964,9 +872,7 @@ def refresh_failed_accounts(
     requested_by_ip: str,
     requested_by_user_agent: str,
     lock_name: str,
-    test_refresh_token: Callable[
-        [str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]
-    ],
+    test_refresh_token: Callable[[str, str, Optional[str]], Tuple[bool, Optional[str], Optional[str]]],
 ) -> Tuple[Dict[str, Any], int]:
     """重试所有失败的账号（非流式）"""
     lock_owner_id = uuid.uuid4().hex
@@ -999,9 +905,7 @@ def refresh_failed_accounts(
     ttl_seconds = compute_refresh_lock_ttl_seconds(total, 0)
     ok, lock_info = acquire_distributed_lock(db, lock_name, lock_owner_id, ttl_seconds)
     if not ok:
-        finish_refresh_run(
-            db, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行"
-        )
+        finish_refresh_run(db, run_id, "skipped", total, 0, 0, "刷新任务冲突：已有刷新在执行")
         error_payload = build_error_payload(
             code="REFRESH_CONFLICT",
             message="当前已有刷新任务执行中，请稍后再试",
@@ -1027,26 +931,18 @@ def refresh_failed_accounts(
             group_id = account["group_id"]
             if group_id:
                 try:
-                    group_row = db.execute(
-                        "SELECT proxy_url FROM groups WHERE id = ?", (group_id,)
-                    ).fetchone()
+                    group_row = db.execute("SELECT proxy_url FROM groups WHERE id = ?", (group_id,)).fetchone()
                     if group_row:
                         proxy_url = group_row["proxy_url"] or ""
                 except Exception:
                     proxy_url = ""
 
             try:
-                refresh_token = (
-                    decrypt_data(encrypted_refresh_token)
-                    if encrypted_refresh_token
-                    else encrypted_refresh_token
-                )
+                refresh_token = decrypt_data(encrypted_refresh_token) if encrypted_refresh_token else encrypted_refresh_token
             except Exception as e:
                 failed_count += 1
                 error_msg = f"解密 token 失败: {str(e)}"
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
                 try:
                     from outlook_web.repositories.refresh_logs import log_refresh_result
 
@@ -1062,9 +958,7 @@ def refresh_failed_accounts(
                     pass
                 continue
 
-            success, error_msg, new_refresh_token = test_refresh_token(
-                client_id, refresh_token, proxy_url
-            )
+            success, error_msg, new_refresh_token = test_refresh_token(client_id, refresh_token, proxy_url)
             try:
                 from outlook_web.repositories.refresh_logs import log_refresh_result
 
@@ -1081,11 +975,7 @@ def refresh_failed_accounts(
 
             if success:
                 try:
-                    if (
-                        isinstance(new_refresh_token, str)
-                        and new_refresh_token.strip()
-                        and new_refresh_token != refresh_token
-                    ):
+                    if isinstance(new_refresh_token, str) and new_refresh_token.strip() and new_refresh_token != refresh_token:
                         db.execute(
                             """
                             UPDATE accounts
@@ -1108,9 +998,7 @@ def refresh_failed_accounts(
                 success_count += 1
             else:
                 failed_count += 1
-                failed_list.append(
-                    {"id": account_id, "email": account_email, "error": error_msg}
-                )
+                failed_list.append({"id": account_id, "email": account_email, "error": error_msg})
     finally:
         release_distributed_lock(db, lock_name, lock_owner_id)
 
