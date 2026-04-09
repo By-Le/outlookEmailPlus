@@ -231,6 +231,35 @@
 - 重点回归：`tests.test_temp_mail_provider_cf` + `tests.test_temp_emails_api_regression` 通过
 - 全量测试：`python -m unittest discover -s tests -v` → `Ran 919 tests ... OK (skipped=7)`
 
+#### 7i. README 与对外接口文档同步更新（面向接入方）
+
+**时间**：2026-04-09
+
+**背景**：在完成 CF 临时邮箱接入池能力与人工验收后，补齐对外可见文档，避免接入方沿用旧字段/旧错误码。
+
+**本次更新文件**：
+
+1. `README.md`
+   - 补充 CF 临时邮箱最近更新：
+     - options 支持 `provider_name`（前端切换 provider 时域名下拉正确联动）
+     - v0.3.1 自动同步 domains（`cf_worker_domains` 为空时自动回源）
+     - `cf_worker_admin_key` 配置不一致会导致 `UNAUTHORIZED` 的注意事项
+   - 在核心能力中补充 `provider=cloudflare_temp_mail` 且池空动态创建
+   - 在环境变量说明中补充 CF Worker 对应项（并注明设置页 key 名）
+
+2. `注册与邮箱池接口文档.md`
+   - `claim-random` 的 `provider` 可选值补全：`outlook/imap/custom/cloudflare_temp_mail`
+   - 明确 `provider=cloudflare_temp_mail` 且池空时会动态创建
+   - 成功返回字段补全：`email_domain`、`claimed_at`
+   - 错误码对齐：`NO_AVAILABLE_ACCOUNT` → `no_available_account`
+   - 补充 `claim-complete` 下 CF 删除策略（success/credential_invalid 删除，失败非阻塞）
+
+3. `registration-mail-pool-api.en.md`
+   - 与中文接口文档做同口径同步（provider 枚举、动态创建行为、返回字段、错误码大小写、CF 删除策略）
+
+**结果**：
+- 接入方文档与当前实现保持一致，减少对接歧义和现场排障成本。
+
 ---
 
 #### 4. CF临时邮箱接入邮箱池：文档补齐 + TDD 编写

@@ -58,6 +58,9 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 **CF Worker 临时邮箱**
 - 多域支持：可在设置页配置多个 CF Worker 域名，新增"同步域名"按钮一键刷新域名列表
 - Admin Key 加密存储：`cf_worker_admin_key` 以 `enc:` 前缀加密写入数据库，不再明文存储（DB v18）
+- 临时邮箱页域名联动修复：`/api/temp-emails/options` 支持按 `provider_name` 返回配置，切换到 CF provider 后可正确展示 CF 域名下拉
+- 自动同步兜底（v0.3.1）：当 `cf_worker_domains` 为空但 `cf_worker_base_url` 已配置时，系统会自动从 CF Worker 拉取 domains 并写回本地配置
+- 配置注意：`cf_worker_admin_key` 必须与 Worker 的 ADMIN_PASSWORDS 一致；不一致时创建邮箱会返回 `UNAUTHORIZED`
 
 **前端体验修复**
 - BUG-06：生成或删除临时邮箱后，列表中已选中邮箱的高亮状态得到正确保留
@@ -83,7 +86,7 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 - 邮件读取与提取
   支持验证码、链接、原文内容读取
 - 邮箱池调度
-  支持可领取、释放、完成、冷却恢复、过期回收等状态流转；支持 `project_key` 项目隔离，同项目内已用邮箱不重复分配
+  支持可领取、释放、完成、冷却恢复、过期回收等状态流转；支持 `project_key` 项目隔离，同项目内已用邮箱不重复分配；`claim-random` 支持 `provider=cloudflare_temp_mail` 且池空时动态创建 CF 邮箱
 - 受控对外接口
   支持 `X-API-Key` 鉴权、多调用方 Key 管理、邮箱范围授权、IP 白名单和速率限制
 - 通知能力
@@ -224,6 +227,10 @@ python -m unittest discover -s tests -v
   GPTMail 服务地址
 - `GPTMAIL_API_KEY`
   GPTMail API Key，用于临时邮箱能力
+- `CF_WORKER_BASE_URL`（设置页对应 `cf_worker_base_url`）
+  Cloudflare Temp Email Worker 地址
+- `CF_WORKER_ADMIN_KEY`（设置页对应 `cf_worker_admin_key`）
+  Cloudflare Worker Admin 密码；建议仅通过设置页保存，系统会加密存储
 
 ### 一键更新相关
 

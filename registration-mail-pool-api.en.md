@@ -322,26 +322,29 @@ Request body:
 | --- | --- | --- | --- |
 | `caller_id` | string | Yes | caller instance, node, or worker identity |
 | `task_id` | string | Yes | unique task ID |
-| `provider` | string | No | provider filter, for example `outlook` |
+| `provider` | string | No | provider filter: `outlook` / `imap` / `custom` / `cloudflare_temp_mail` |
 
 Current implementation notes:
 
 - the current pool API supports filtering only by `provider`
 - `outlook.com`, `hotmail.com`, `live.com`, and `live.cn` all map to `provider=outlook`
 - the current external pool API does not support extra filtering by domain, group, or tags
+- when `provider=cloudflare_temp_mail` and no eligible mailbox exists in pool, the service dynamically creates a CF temp mailbox and returns it as claimed
 
 Success response fields:
 
 - `account_id`
 - `email`
+- `email_domain`
 - `claim_token`
+- `claimed_at`
 - `lease_expires_at`
 
 When no mailbox is available, the current implementation returns:
 
 - HTTP `200`
 - response body with `success=false`
-- `code=NO_AVAILABLE_ACCOUNT`
+- `code=no_available_account`
 
 ### `POST /api/external/pool/claim-release`
 
@@ -382,6 +385,9 @@ Current implementation notes:
 
 - `success` marks the mailbox as globally `used`
 - the current version does not support project-scoped reuse of the same mailbox
+- for `provider=cloudflare_temp_mail`:
+  - `result in ('success','credential_invalid')` triggers a best-effort remote mailbox deletion
+  - deletion failure is non-blocking and does not break `claim-complete` success response
 
 ### `GET /api/external/pool/stats`
 
@@ -448,7 +454,7 @@ The sync `wait-message` endpoint returns only a matching message that appears af
 | `VERIFICATION_LINK_NOT_FOUND` | no high-confidence verification link was extracted |
 | `UPSTREAM_READ_FAILED` | Graph / IMAP read failed |
 | `PROXY_ERROR` | proxy connection failed |
-| `NO_AVAILABLE_ACCOUNT` | no eligible mailbox is currently available in the pool |
+| `no_available_account` | no eligible mailbox is currently available in the pool |
 | `TOKEN_MISMATCH` | `claim_token` does not match |
 | `CALLER_MISMATCH` | `caller_id` or `task_id` does not match the claim record |
 | `NOT_CLAIMED` | the mailbox is not currently in `claimed` state |
@@ -477,7 +483,7 @@ The mailbox stays `claimed`, then moves to `cooldown` after lease expiration, an
 
 Not in the current version. `success` marks the mailbox as globally `used`.
 
-### Q5: Why does `NO_AVAILABLE_ACCOUNT` still use HTTP 200?
+### Q5: Why does `no_available_account` still use HTTP 200?
 
 That is the current implementation behavior. Integrators must check `success` and `code`, not only the HTTP status.
 
@@ -491,7 +497,8 @@ If you still use older scripts, migrate as follows:
 2. send `X-API-Key` for all external requests
 3. add mail-reading calls to the registration flow:
    `verification-code` / `verification-link` / `wait-message`
-4. explicitly handle `403`, `429`, and `NO_AVAILABLE_ACCOUNT`
+4. explicitly handle `403`, `429`, and `no_available_account`
+5. if you need CF temp mail from pool, send `provider=cloudflare_temp_mail` in `claim-random`
 
 ---
 
