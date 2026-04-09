@@ -190,7 +190,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
                 source="legacy_gptmail",
             )
 
-        with patch("outlook_web.services.gptmail.get_temp_emails_from_api", return_value=[]):
+        with patch(
+            "outlook_web.services.gptmail.get_temp_emails_from_api", return_value=[]
+        ):
             resp = client.get(f"/api/temp-emails/{email_addr}/messages")
 
         self.assertEqual(resp.status_code, 200)
@@ -266,7 +268,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
             "outlook_web.services.gptmail.get_temp_email_detail_from_api",
             side_effect=Exception("should not call upstream when refresh_if_missing=0"),
         ):
-            resp = client.get(f"/api/temp-emails/{email_addr}/messages/msg-missing?refresh_if_missing=0")
+            resp = client.get(
+                f"/api/temp-emails/{email_addr}/messages/msg-missing?refresh_if_missing=0"
+            )
 
         self.assertEqual(resp.status_code, 404)
         data = resp.get_json()
@@ -333,9 +337,13 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
 
         email_addr = f"delete_{uuid.uuid4().hex}@temp.example"
         self._insert_temp_email(email_addr)
-        self._insert_temp_email_message(email_addr=email_addr, message_id="msg-delete-1")
+        self._insert_temp_email_message(
+            email_addr=email_addr, message_id="msg-delete-1"
+        )
 
-        with patch("outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True) as delete_mock:
+        with patch(
+            "outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True
+        ) as delete_mock:
             resp = client.delete(f"/api/temp-emails/{email_addr}/messages/msg-delete-1")
 
         self.assertEqual(resp.status_code, 200)
@@ -345,7 +353,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
-            self.assertIsNone(temp_emails_repo.get_temp_email_message_by_id("msg-delete-1"))
+            self.assertIsNone(
+                temp_emails_repo.get_temp_email_message_by_id("msg-delete-1")
+            )
 
     def test_clear_temp_email_messages_clears_local_cache_and_returns_success(self):
         client = self.app.test_client()
@@ -356,7 +366,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         self._insert_temp_email_message(email_addr=email_addr, message_id="msg-clear-1")
         self._insert_temp_email_message(email_addr=email_addr, message_id="msg-clear-2")
 
-        with patch("outlook_web.services.gptmail.clear_temp_emails_from_api", return_value=True) as clear_mock:
+        with patch(
+            "outlook_web.services.gptmail.clear_temp_emails_from_api", return_value=True
+        ) as clear_mock:
             resp = client.delete(f"/api/temp-emails/{email_addr}/clear")
 
         self.assertEqual(resp.status_code, 200)
@@ -416,7 +428,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
                 source="legacy_gptmail",
             )
 
-        with patch("outlook_web.services.gptmail.get_temp_emails_from_api", return_value=[]):
+        with patch(
+            "outlook_web.services.gptmail.get_temp_emails_from_api", return_value=[]
+        ):
             resp = client.post(f"/api/temp-emails/{email_addr}/refresh")
 
         self.assertEqual(resp.status_code, 200)
@@ -464,6 +478,20 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         data = resp.get_json()
         self.assertFalse(data["success"])
         self.assertEqual(data["error"]["code"], "TEMP_MAIL_OPTIONS_UNAVAILABLE")
+
+    def test_temp_email_options_supports_provider_name_query_param(self):
+        """回归：/api/temp-emails/options 应支持按 provider_name 返回 options。"""
+        client = self.app.test_client()
+        self._login(client)
+
+        # cloudflare_temp_mail provider 不依赖 temp_mail_provider 全局设置
+        # 这里不要求 domains 一定非空，只验证接口能返回 success/options 结构。
+        resp = client.get("/api/temp-emails/options?provider_name=cloudflare_temp_mail")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertIn("options", data)
+        self.assertEqual(data["options"].get("provider_name"), "cloudflare_temp_mail")
 
     def test_get_temp_emails_only_returns_visible_user_mailboxes(self):
         client = self.app.test_client()
@@ -522,16 +550,26 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         self.assertIn("111111", detail_a.get_json()["email"]["body"])
         self.assertIn("222222", detail_b.get_json()["email"]["body"])
 
-        with patch("outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True):
-            delete_resp = client.delete(f"/api/temp-emails/{email_a}/messages/msg-shared")
+        with patch(
+            "outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True
+        ):
+            delete_resp = client.delete(
+                f"/api/temp-emails/{email_a}/messages/msg-shared"
+            )
 
         self.assertEqual(delete_resp.status_code, 200)
 
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
-            self.assertIsNone(temp_emails_repo.get_temp_email_message_by_id("msg-shared", email_addr=email_a))
-            remaining = temp_emails_repo.get_temp_email_message_by_id("msg-shared", email_addr=email_b)
+            self.assertIsNone(
+                temp_emails_repo.get_temp_email_message_by_id(
+                    "msg-shared", email_addr=email_a
+                )
+            )
+            remaining = temp_emails_repo.get_temp_email_message_by_id(
+                "msg-shared", email_addr=email_b
+            )
 
         self.assertIsNotNone(remaining)
         assert remaining is not None
@@ -543,7 +581,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
 
         email_addr = f"mailbox_{uuid.uuid4().hex}@temp.example"
         self._insert_temp_email(email_addr)
-        self._insert_temp_email_message(email_addr=email_addr, message_id="msg-mailbox-1")
+        self._insert_temp_email_message(
+            email_addr=email_addr, message_id="msg-mailbox-1"
+        )
 
         resp = client.delete(f"/api/temp-emails/{email_addr}")
 
@@ -562,13 +602,17 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
 
         email_addr = f"deletefail_{uuid.uuid4().hex}@temp.example"
         self._insert_temp_email(email_addr)
-        self._insert_temp_email_message(email_addr=email_addr, message_id="msg-delete-fail-1")
+        self._insert_temp_email_message(
+            email_addr=email_addr, message_id="msg-delete-fail-1"
+        )
 
         with patch(
             "outlook_web.services.gptmail.delete_temp_email_from_api",
             return_value=False,
         ):
-            resp = client.delete(f"/api/temp-emails/{email_addr}/messages/msg-delete-fail-1")
+            resp = client.delete(
+                f"/api/temp-emails/{email_addr}/messages/msg-delete-fail-1"
+            )
 
         self.assertEqual(resp.status_code, 502)
         data = resp.get_json()
@@ -578,7 +622,11 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
-            self.assertIsNotNone(temp_emails_repo.get_temp_email_message_by_id("msg-delete-fail-1", email_addr=email_addr))
+            self.assertIsNotNone(
+                temp_emails_repo.get_temp_email_message_by_id(
+                    "msg-delete-fail-1", email_addr=email_addr
+                )
+            )
 
     def test_clear_temp_email_messages_keeps_local_cache_when_remote_clear_fails(self):
         client = self.app.test_client()
@@ -586,8 +634,12 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
 
         email_addr = f"clearfail_{uuid.uuid4().hex}@temp.example"
         self._insert_temp_email(email_addr)
-        self._insert_temp_email_message(email_addr=email_addr, message_id="msg-clear-fail-1")
-        self._insert_temp_email_message(email_addr=email_addr, message_id="msg-clear-fail-2")
+        self._insert_temp_email_message(
+            email_addr=email_addr, message_id="msg-clear-fail-1"
+        )
+        self._insert_temp_email_message(
+            email_addr=email_addr, message_id="msg-clear-fail-2"
+        )
 
         with patch(
             "outlook_web.services.gptmail.clear_temp_emails_from_api",
@@ -603,7 +655,9 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
-            self.assertEqual(len(temp_emails_repo.get_temp_email_messages(email_addr)), 2)
+            self.assertEqual(
+                len(temp_emails_repo.get_temp_email_messages(email_addr)), 2
+            )
 
     def test_message_detail_and_delete_are_scoped_by_mailbox_when_message_ids_collide(
         self,
@@ -615,16 +669,24 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         second_email = f"scope2_{uuid.uuid4().hex}@temp.example"
         self._insert_temp_email(first_email)
         self._insert_temp_email(second_email)
-        self._insert_temp_email_message(email_addr=first_email, message_id="shared-id", content="Body A")
-        self._insert_temp_email_message(email_addr=second_email, message_id="shared-id", content="Body B")
+        self._insert_temp_email_message(
+            email_addr=first_email, message_id="shared-id", content="Body A"
+        )
+        self._insert_temp_email_message(
+            email_addr=second_email, message_id="shared-id", content="Body B"
+        )
 
         detail_resp = client.get(f"/api/temp-emails/{second_email}/messages/shared-id")
         self.assertEqual(detail_resp.status_code, 200)
         detail_data = detail_resp.get_json()
         self.assertEqual(detail_data["email"]["body"], "Body B")
 
-        with patch("outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True) as delete_mock:
-            delete_resp = client.delete(f"/api/temp-emails/{first_email}/messages/shared-id")
+        with patch(
+            "outlook_web.services.gptmail.delete_temp_email_from_api", return_value=True
+        ) as delete_mock:
+            delete_resp = client.delete(
+                f"/api/temp-emails/{first_email}/messages/shared-id"
+            )
 
         self.assertEqual(delete_resp.status_code, 200)
         delete_mock.assert_called_once_with(first_email, "shared-id")
@@ -632,5 +694,13 @@ class TempEmailsApiRegressionTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
-            self.assertIsNone(temp_emails_repo.get_temp_email_message_by_id("shared-id", email_addr=first_email))
-            self.assertIsNotNone(temp_emails_repo.get_temp_email_message_by_id("shared-id", email_addr=second_email))
+            self.assertIsNone(
+                temp_emails_repo.get_temp_email_message_by_id(
+                    "shared-id", email_addr=first_email
+                )
+            )
+            self.assertIsNotNone(
+                temp_emails_repo.get_temp_email_message_by_id(
+                    "shared-id", email_addr=second_email
+                )
+            )

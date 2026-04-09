@@ -16,7 +16,12 @@
             }
 
             try {
-                const response = await fetch('/api/temp-emails/options');
+                const providerSelect = document.getElementById('tempEmailProviderSelect');
+                const providerName = providerSelect && providerSelect.value ? providerSelect.value.trim() : '';
+                const url = providerName
+                    ? `/api/temp-emails/options?provider_name=${encodeURIComponent(providerName)}`
+                    : '/api/temp-emails/options';
+                const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }

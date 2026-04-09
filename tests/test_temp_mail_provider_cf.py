@@ -168,13 +168,25 @@ class CloudflareTempMailProviderTests(unittest.TestCase):
 
             settings_repo.set_setting("temp_mail_provider", "cloudflare_temp_mail")
             # CF Worker 使用独立配置键（与 GPTMail 隔离）
-            settings_repo.set_setting("cf_worker_base_url", "https://cf-worker.example.workers.dev")
-            settings_repo.set_setting("cf_worker_admin_key", "super-secret-admin-pass")
             settings_repo.set_setting(
-                "temp_mail_domains",
+                "cf_worker_base_url", "https://cf-worker.example.workers.dev"
+            )
+            settings_repo.set_setting("cf_worker_admin_key", "super-secret-admin-pass")
+
+            # v0.3+：CF Worker 域名配置应写入 cf_worker_* key。
+            settings_repo.set_setting(
+                "cf_worker_domains",
                 '[{"name":"cf-mail.example.com","enabled":true},{"name":"cf-alt.example.com","enabled":true}]',
             )
-            settings_repo.set_setting("temp_mail_default_domain", "cf-mail.example.com")
+            settings_repo.set_setting("cf_worker_default_domain", "cf-mail.example.com")
+            settings_repo.set_setting(
+                "cf_worker_prefix_rules",
+                '{"min_length":1,"max_length":32,"pattern":"^[a-z0-9][a-z0-9._-]*$"}',
+            )
+
+            # legacy keys 清空，避免测试被 fallback 逻辑误导
+            settings_repo.set_setting("temp_mail_domains", "[]")
+            settings_repo.set_setting("temp_mail_default_domain", "")
             settings_repo.set_setting("temp_mail_prefix_rules", "")
 
     def _make_provider(self):
@@ -184,7 +196,9 @@ class CloudflareTempMailProviderTests(unittest.TestCase):
 
         return CloudflareTempMailProvider(provider_name="cloudflare_temp_mail")
 
-    def _make_mailbox(self, email: str = "test@cf-mail.example.com", jwt: str = "eyJhbGc.test.jwt") -> dict:
+    def _make_mailbox(
+        self, email: str = "test@cf-mail.example.com", jwt: str = "eyJhbGc.test.jwt"
+    ) -> dict:
         return {
             "email": email,
             "kind": "temp",
@@ -206,11 +220,47 @@ class CloudflareTempMailProviderTests(unittest.TestCase):
 
         self.assertEqual(options["provider"], "cloudflare_temp_mail")
         self.assertEqual(options["provider_label"], "cloudflare_temp_mail")
-        self.assertEqual(options["api_base_url"], "https://cf-worker.example.workers.dev")
+        self.assertEqual(
+            options["api_base_url"], "https://cf-worker.example.workers.dev"
+        )
         domains = options["domains"]
         self.assertEqual(len(domains), 2)
         default_domain = next(d for d in domains if d["is_default"])
         self.assertEqual(default_domain["name"], "cf-mail.example.com")
+
+    def test_get_options_auto_sync_writes_cf_worker_domains_when_empty(self):
+        """v0.3.1: 当 cf_worker_domains 为空但 base_url 已配置时，应自动同步并写回 cf_worker_domains。"""
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            # 清空 cf_worker_domains，模拟“配置了 base_url 但未点同步”的真实场景
+            settings_repo.set_setting("cf_worker_domains", "[]")
+            settings_repo.set_setting("cf_worker_default_domain", "")
+
+            provider = self._make_provider()
+
+            # mock open_api/settings 返回 domains
+            with patch.object(
+                provider,
+                "get_cf_worker_domains",
+                return_value={
+                    "success": True,
+                    "domains": ["zerodotsix.top", "outlookmailplus.tech"],
+                    "default_domain": "zerodotsix.top",
+                    "title": "ZeroTemp Mail",
+                    "version": "v1.5.0",
+                },
+            ):
+                options = provider.get_options()
+
+            # options 中应包含 domains
+            domains = options.get("domains") or []
+            self.assertGreaterEqual(len(domains), 1)
+            self.assertTrue(any(d.get("name") == "zerodotsix.top" for d in domains))
+
+            # DB 中也应写回 cf_worker_domains
+            stored = settings_repo.get_cf_worker_domains()
+            self.assertTrue(any(d.get("name") == "zerodotsix.top" for d in stored))
 
     # ------------------------------------------------------------------
     # create_mailbox
@@ -227,17 +277,23 @@ class CloudflareTempMailProviderTests(unittest.TestCase):
                 "address_id": "addr-456",
             }
             with patch("requests.post", return_value=mock_resp) as post_mock:
-                result = provider.create_mailbox(prefix="hello", domain="cf-mail.example.com")
+                result = provider.create_mailbox(
+                    prefix="hello", domain="cf-mail.example.com"
+                )
 
         self.assertTrue(result["success"])
         self.assertEqual(result["email"], "hello@cf-mail.example.com")
         meta = result["meta"]
-        self.assertEqual(meta["provider_jwt"], "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test")
+        self.assertEqual(
+            meta["provider_jwt"], "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test"
+        )
         self.assertEqual(meta["provider_mailbox_id"], "addr-456")
         self.assertTrue(meta["provider_capabilities"]["delete_mailbox"])
         # enablePrefix=False 必须被传入
         call_kwargs = post_mock.call_args
-        payload = call_kwargs[1]["json"] if "json" in call_kwargs[1] else call_kwargs[0][1]
+        payload = (
+            call_kwargs[1]["json"] if "json" in call_kwargs[1] else call_kwargs[0][1]
+        )
         self.assertFalse(payload.get("enablePrefix", True))
 
     def test_create_mailbox_missing_base_url_returns_error(self):
@@ -326,7 +382,9 @@ class CloudflareTempMailProviderTests(unittest.TestCase):
 
         with self.app.app_context():
             provider = self._make_provider()
-            with patch("requests.delete", side_effect=req.RequestException("conn error")):
+            with patch(
+                "requests.delete", side_effect=req.RequestException("conn error")
+            ):
                 result = provider.delete_mailbox(self._make_mailbox())
 
         self.assertFalse(result)
@@ -686,7 +744,9 @@ class CfProviderFactoryRoutingTests(unittest.TestCase):
                 get_temp_mail_provider,
             )
 
-            settings_repo.set_setting("temp_mail_provider", "totally_unknown_provider_xyz")
+            settings_repo.set_setting(
+                "temp_mail_provider", "totally_unknown_provider_xyz"
+            )
             with self.assertRaises(TempMailProviderFactoryError) as ctx:
                 get_temp_mail_provider()
 

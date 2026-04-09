@@ -149,6 +149,88 @@
 - `static/js/features/groups.js` — CF provider 标签 + 编辑/删除按钮禁用
 - `outlook_web/controllers/accounts.py` — 删除/编辑 CF pool 账号保护（4 处）
 
+#### 7f. 临时邮箱页面 CF 域名下拉不显示：BUG 确认 + 方案 A 选定 + 文档对齐更新
+
+**时间**：2026-04-09
+
+**背景**：在验收 CF Worker 临时邮箱/邮箱池接入时发现一个前端体验 BUG —— 设置页已同步的 CF 域名在「⚡ 临时邮箱」页选择 `cloudflare_temp_mail` provider 后，域名下拉不展示。
+
+**根因结论**（已记录到 BUG 文档）：
+- `/api/temp-emails/options` 当前不支持按 provider 返回（始终按全局 runtime provider 返回 options）
+- `CloudflareTempMailProvider.get_options()` 读取的是 `temp_mail_*` key，但设置页同步写入的是 `cf_worker_*` key，导致 domains 为空
+
+**本次决策**：确认采用 **修复方案 A（推荐）**
+- options API 支持 `provider_name` 参数（后端按 provider 返回 options）
+- CF provider 的 options 读取口径切换为 `cf_worker_*`
+- 前端请求 options 时携带当前选择的 provider
+
+**本次实际操作**（按“以代码为准”修正文档）：
+- 更新/对齐文档：
+  - `docs/FD/2026-04-09-CF临时邮箱接入邮箱池FD.md`（修正“读信无需改动/解析返回 kind=account/account_type=temp_mail”等不准确描述；强调 resolver 返回 `kind='temp'`）
+  - `docs/TD/2026-04-09-CF临时邮箱接入邮箱池TD.md`（修正“Repository 层进行网络调用”的伪代码与函数命名；对齐实际实现：网络调用在 Service，Repository 仅 DB 写入）
+  - `docs/TODO/2026-04-09-CF临时邮箱接入邮箱池TODO.md`（补齐 Phase 4/6 的已完成勾选，保持与 WORKSPACE 的真实进度一致）
+  - `docs/BUG/2026-04-09-临时邮箱-CF域名配置不生效-Options口径不一致BUG.md`（状态更新为“已确认方案 A，待实施”）
+
+#### 7g. BUG 修复实施完成 + 人工验收通过（含一次配置值误报排查）
+
+**时间**：2026-04-09
+
+**实施内容**：
+
+1. **方案 A 落地**：
+   - `/api/temp-emails/options` 支持 `provider_name` 参数（后端按 provider 返回 options）
+   - `TempMailService.get_options(provider_name=...)` 支持按 provider 取配置
+   - 前端 `loadTempEmailOptions()` 带 provider 查询参数
+
+2. **v0.3.1 快速修复**：
+   - `CloudflareTempMailProvider.get_options()` 增加自动同步逻辑：
+     - 当 `cf_worker_domains` 为空且 `cf_worker_base_url` 已配置时，自动请求 `GET {base_url}/open_api/settings`
+     - 成功后写回 `cf_worker_domains` / `cf_worker_default_domain`
+     - 失败非阻塞（warning）
+
+3. **人工验收（真实环境）**：
+   - provider=CF 后域名下拉可见（`zerodotsix.top`, `outlookmailplus.tech`）
+   - 指定域名创建邮箱成功
+
+4. **现场故障排查记录**：
+   - 现象：创建时报 `UNAUTHORIZED` / 502
+   - 根因：`cf_worker_admin_key` 配置值错误（写入了 `admin123`，实际应为 `1234567890-=`）
+   - 结论：非代码保存链路缺陷，修正配置值后恢复
+
+#### 7h. 文档二次对齐收尾（按“代码与测试结果为准”）
+
+**时间**：2026-04-09
+
+**目标**：将 `FD/TD/TODO/BUG` 与当前实现、真实人工验收、全量测试结果一致化，清理历史“计划态/样例态”描述。
+
+**本次对齐动作**：
+
+1. `docs/TODO/2026-04-09-CF临时邮箱接入邮箱池TODO.md`
+   - 将全量测试从 `917/917` 更新为 `919/919`
+   - 明确 claim/complete audit 当前字段覆盖现状（claim-complete 额外 provider 标为后续增强）
+   - 明确 `mailbox_resolver` + external read 最小链路已由真实 E2E 覆盖
+   - 文末声明更新为“已持续回填，默认以代码和测试为准”
+
+2. `docs/FD/2026-04-09-CF临时邮箱接入邮箱池FD.md`
+   - 修正测试文件引用：去除不存在的 `test_pool_cf_integration.py / test_external_pool_cf_e2e.py / test_pool_cf_contract.py`
+   - 对齐当前实际测试文件：`test_pool_cf_integration_tdd_skeleton.py`、`test_pool_cf_real_e2e.py`、`test_temp_emails_api_regression.py`、`test_temp_mail_provider_cf.py`
+   - 调整“文档更新”章节为当前仓库状态描述（CHANGELOG/API 文档按可选同步）
+
+3. `docs/TD/2026-04-09-CF临时邮箱接入邮箱池TD.md`
+   - 将“动态创建在 claim_atomic 中调用 `_create_cf_temp_email_for_pool()`”改为真实实现：Service 层 `_create_cf_mailbox_for_pool()` + Repository `insert_claimed_account()`
+   - 将 external claim-random 示例对齐为当前 controller 结构（返回字段以当前实现为准）
+   - 修正里程碑与验收项：标注已完成项、待发布项、测试结果（919/919）
+   - 将不存在测试文件替换为当前真实文件
+
+4. `docs/BUG/2026-04-09-临时邮箱-CF域名配置不生效-Options口径不一致BUG.md`
+   - 状态改为“已修复”
+   - 补充 v0.3.1 自动同步实现与人工验收结论
+   - 补充“UNAUTHORIZED 为配置值错误而非保存链路缺陷”的排查记录
+
+**验证**：
+- 重点回归：`tests.test_temp_mail_provider_cf` + `tests.test_temp_emails_api_regression` 通过
+- 全量测试：`python -m unittest discover -s tests -v` → `Ran 919 tests ... OK (skipped=7)`
+
 ---
 
 #### 4. CF临时邮箱接入邮箱池：文档补齐 + TDD 编写

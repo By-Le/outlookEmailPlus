@@ -100,7 +100,9 @@ def _parse_mime_raw(raw_mime: str) -> dict[str, Any]:
     - has_html      : bool
     """
     try:
-        msg = _email_lib.message_from_string(raw_mime, policy=_email_lib.policy.compat32)
+        msg = _email_lib.message_from_string(
+            raw_mime, policy=_email_lib.policy.compat32
+        )
     except Exception:
         return {
             "subject": "",
@@ -177,7 +179,9 @@ def _parse_mime_raw(raw_mime: str) -> dict[str, Any]:
     }
 
 
-def _normalize_domain_entries(raw_domains: Any, default_domain: str) -> list[dict[str, Any]]:
+def _normalize_domain_entries(
+    raw_domains: Any, default_domain: str
+) -> list[dict[str, Any]]:
     domains: list[dict[str, Any]] = []
     seen: set[str] = set()
     values: list[Any] = raw_domains if isinstance(raw_domains, list) else []
@@ -213,10 +217,13 @@ class CloudflareTempMailProvider(TempMailProviderBase):
     对接 Cloudflare Workers Temp Email 的 Provider 实现。
 
     配置读取（来自 settings 表）：
-    - ``temp_mail_api_base_url`` : CF Worker 部署地址（如 https://mail.example.workers.dev）
-    - ``temp_mail_api_key``      : CF Worker ADMIN_PASSWORDS 中的一个值
-    - ``temp_mail_domains``      : CF Worker 配置的域名列表（JSON 数组）
-    - ``temp_mail_default_domain``: 默认域名
+    - ``cf_worker_base_url``          : CF Worker 部署地址（如 https://mail.example.workers.dev）
+    - ``cf_worker_admin_key``         : CF Worker ADMIN_PASSWORDS 中的一个值
+    - ``cf_worker_domains``           : CF Worker 配置的域名列表（JSON 数组）
+    - ``cf_worker_default_domain``    : 默认域名
+
+    兼容：若 cf_worker_* 未配置，会回退读取旧 key：
+    - ``temp_mail_domains`` / ``temp_mail_default_domain`` / ``temp_mail_prefix_rules``
     """
 
     def __init__(self, *, provider_name: str | None = None):
@@ -286,24 +293,84 @@ class CloudflareTempMailProvider(TempMailProviderBase):
     # ------------------------------------------------------------------
 
     def get_options(self) -> dict[str, Any]:
-        raw_domains_str = settings_repo.get_setting("temp_mail_domains", "[]")
-        default_domain = settings_repo.get_setting("temp_mail_default_domain", "").strip()
-        raw_prefix_rules_str = settings_repo.get_setting("temp_mail_prefix_rules", "") or ""
+        # v0.3: 设置页 CF Worker 配置与 GPTMail 配置隔离。
+        # 优先读 cf_worker_*，为空时回退 temp_mail_*（兼容旧配置/旧数据）。
+        cf_domains = settings_repo.get_cf_worker_domains()
+        cf_default_domain = settings_repo.get_cf_worker_default_domain()
+        cf_prefix_rules = settings_repo.get_cf_worker_prefix_rules()
 
-        try:
-            domains_payload = json.loads(raw_domains_str)
-        except (json.JSONDecodeError, TypeError):
+        # v0.3.1: 自动同步（快速修复）
+        # 现实场景中管理员可能已配置 cf_worker_base_url，但尚未点“同步域名”按钮。
+        # 这会导致前端域名下拉为空（只有“自动分配域名”），用户体验较差。
+        #
+        # 策略：当 cf_worker_domains 为空且 base_url 已配置时，自动调用
+        # GET {base_url}/open_api/settings 拉取 domains，并写回 cf_worker_domains /
+        # cf_worker_default_domain（与 GPTMail 完全独立）。
+        #
+        # 注意：同步失败必须是非阻塞（不影响 options 返回），并继续走 legacy fallback。
+        if not cf_domains:
+            base_url = self._base_url()
+            if base_url:
+                try:
+                    sync_result = self.get_cf_worker_domains()
+                    if sync_result.get("success") and (
+                        sync_result.get("domains") or []
+                    ):
+                        domains: list[str] = sync_result.get("domains") or []
+                        default_domain: str = str(
+                            sync_result.get("default_domain") or ""
+                        ).strip()
+                        domains_payload = [
+                            {"name": d, "enabled": True}
+                            for d in domains
+                            if str(d or "").strip()
+                        ]
+                        if domains_payload:
+                            settings_repo.set_setting(
+                                "cf_worker_domains",
+                                json.dumps(domains_payload, ensure_ascii=False),
+                                commit=True,
+                            )
+                            if default_domain:
+                                settings_repo.set_setting(
+                                    "cf_worker_default_domain",
+                                    default_domain,
+                                    commit=True,
+                                )
+                            # 重新读取一次，确保后续逻辑使用最新配置（并避免重复回源）
+                            cf_domains = settings_repo.get_cf_worker_domains()
+                            cf_default_domain = (
+                                settings_repo.get_cf_worker_default_domain()
+                            )
+                except Exception as exc:
+                    logger.warning("[cf_provider] auto sync domains failed err=%s", exc)
+
+        legacy_domains = settings_repo.get_temp_mail_domains()
+        legacy_default_domain = settings_repo.get_temp_mail_default_domain()
+        legacy_prefix_rules = settings_repo.get_temp_mail_prefix_rules()
+
+        domains_payload = cf_domains if cf_domains else legacy_domains
+        default_domain = (cf_default_domain or "").strip() or (
+            legacy_default_domain or ""
+        ).strip()
+        prefix_rules = cf_prefix_rules if cf_prefix_rules else legacy_prefix_rules
+
+        # 防御：确保类型
+        if not isinstance(domains_payload, list):
             domains_payload = []
-
-        try:
-            prefix_rules = json.loads(raw_prefix_rules_str) if raw_prefix_rules_str else {}
-        except (json.JSONDecodeError, TypeError):
+        if not isinstance(prefix_rules, dict):
             prefix_rules = {}
 
         normalized_prefix_rules = {
-            "min_length": int(prefix_rules.get("min_length", DEFAULT_PREFIX_RULES["min_length"])),
-            "max_length": int(prefix_rules.get("max_length", DEFAULT_PREFIX_RULES["max_length"])),
-            "pattern": str(prefix_rules.get("pattern") or DEFAULT_PREFIX_RULES["pattern"]),
+            "min_length": int(
+                prefix_rules.get("min_length", DEFAULT_PREFIX_RULES["min_length"])
+            ),
+            "max_length": int(
+                prefix_rules.get("max_length", DEFAULT_PREFIX_RULES["max_length"])
+            ),
+            "pattern": str(
+                prefix_rules.get("pattern") or DEFAULT_PREFIX_RULES["pattern"]
+            ),
         }
 
         return {
@@ -317,7 +384,9 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             "api_base_url": self._base_url(),
         }
 
-    def create_mailbox(self, *, prefix: str | None = None, domain: str | None = None) -> dict[str, Any]:
+    def create_mailbox(
+        self, *, prefix: str | None = None, domain: str | None = None
+    ) -> dict[str, Any]:
         """
         调用 POST /admin/new_address 创建邮箱。
 
@@ -464,7 +533,9 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             )
             return resp.ok
         except requests.RequestException as exc:
-            logger.warning("[cf_provider] delete_mailbox failed id=%s err=%s", address_id, exc)
+            logger.warning(
+                "[cf_provider] delete_mailbox failed id=%s err=%s", address_id, exc
+            )
             return False
 
     def list_messages(self, mailbox: dict[str, Any] | str) -> list[dict[str, Any]]:
@@ -567,7 +638,9 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             }
 
         # BUG-CF-01：from_address 优先从解析后的 MIME 中取，其次使用 CF 的 source 字段
-        from_address = (parsed.get("from_address") or str(cf_msg.get("source") or "")).strip()
+        from_address = (
+            parsed.get("from_address") or str(cf_msg.get("source") or "")
+        ).strip()
 
         # subject 优先从 MIME 中取，其次从顶层字段取（部分 CF 版本可能有）
         subject = (parsed.get("subject") or str(cf_msg.get("subject") or "")).strip()
@@ -589,7 +662,9 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             "raw_message_id": cf_message_id_header,
         }
 
-    def get_message_detail(self, mailbox: dict[str, Any] | str, message_id: str) -> dict[str, Any] | None:
+    def get_message_detail(
+        self, mailbox: dict[str, Any] | str, message_id: str
+    ) -> dict[str, Any] | None:
         """
         CF Worker 无独立「获取单封邮件」接口，
         通过 list_messages 获取全部邮件后按 message_id 过滤。
@@ -629,7 +704,9 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             )
             return resp.ok
         except requests.RequestException as exc:
-            logger.warning("[cf_provider] delete_message failed id=%s err=%s", message_id, exc)
+            logger.warning(
+                "[cf_provider] delete_message failed id=%s err=%s", message_id, exc
+            )
             return False
 
     def clear_messages(self, mailbox: dict[str, Any] | str) -> bool:
