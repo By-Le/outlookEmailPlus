@@ -8,7 +8,6 @@ from flask import jsonify, request
 
 from outlook_web import config
 from outlook_web.audit import log_audit
-from outlook_web.db import get_db
 from outlook_web.errors import build_error_payload, build_error_response
 from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import groups as groups_repo
@@ -113,25 +112,8 @@ def _persist_refresh_token(account: Dict[str, Any], new_refresh_token: str) -> N
     token = str(new_refresh_token or "").strip()
     if not token:
         return
-    if token == str(account.get("refresh_token") or ""):
-        return
-
-    from outlook_web.security.crypto import encrypt_data as _encrypt_data
-
-    try:
-        db = get_db()
-        db.execute(
-            """
-            UPDATE accounts
-            SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (_encrypt_data(token), int(account["id"])),
-        )
-        db.commit()
+    if accounts_repo.update_refresh_token_if_changed(int(account["id"]), token):
         account["refresh_token"] = token
-    except Exception:
-        pass
 
 
 def _update_account_summary_from_verification(
@@ -246,31 +228,10 @@ def api_get_emails(email_addr: str) -> Any:
             folder=folder,
         )
         # 更新刷新时间，同时保存 Microsoft 可能返回的新 refresh_token（Token Rotation）
-        db = get_db()
         new_rt = graph_result.get("new_refresh_token")
-        if new_rt and new_rt != account.get("refresh_token"):
-            from outlook_web.security.crypto import encrypt_data as _encrypt_data
-
-            try:
-                db.execute(
-                    "UPDATE accounts SET refresh_token = ?, last_refresh_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?",
-                    (_encrypt_data(new_rt), email_addr),
-                )
-            except Exception:
-                db.execute(
-                    "UPDATE accounts SET last_refresh_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE email = ?",
-                    (email_addr,),
-                )
-        else:
-            db.execute(
-                """
-                UPDATE accounts
-                SET last_refresh_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                WHERE email = ?
-            """,
-                (email_addr,),
-            )
-        db.commit()
+        if new_rt:
+            _persist_refresh_token(account, str(new_rt or ""))
+        accounts_repo.touch_last_refresh_at(int(account["id"]))
 
         # 格式化 Graph API 返回的数据
         formatted = []

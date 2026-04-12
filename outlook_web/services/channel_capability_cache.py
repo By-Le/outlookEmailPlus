@@ -36,7 +36,24 @@ def get_status(email: str, channel: str) -> Optional[str]:
 
 
 def filter_channel_plan(email: str, channel_plan: List[str]) -> List[str]:
-    return [ch for ch in channel_plan if get_status(email, ch) != "unavailable"]
+    with _lock:
+        account_cache = _cache.get(email)
+        if not account_cache:
+            return list(channel_plan)
+
+        now = time.monotonic()
+        status_snapshot: Dict[str, str] = {}
+        expired_channels: List[str] = []
+        for ch, entry in account_cache.items():
+            if now >= entry["expires_at"]:
+                expired_channels.append(ch)
+                continue
+            status_snapshot[ch] = str(entry.get("status") or "")
+
+        for ch in expired_channels:
+            account_cache.pop(ch, None)
+
+    return [ch for ch in channel_plan if status_snapshot.get(ch) != "unavailable"]
 
 
 def clear_for_account(email: str) -> None:

@@ -977,6 +977,23 @@ def _extract_verification_with_memory_for_outlook(  # noqa: C901
             raise UpstreamReadFailedError(
                 "Graph/IMAP 均读取失败", data=result.get("upstream_errors")
             )
+        if error_code == "VERIFICATION_NOT_FOUND":
+            if expected_field == "verification_code":
+                raise VerificationCodeNotFoundError(
+                    "未找到符合条件的验证码邮件",
+                    data={
+                        "email": email_addr,
+                        "upstream_errors": result.get("upstream_errors"),
+                    },
+                )
+            if expected_field == "verification_link":
+                raise VerificationLinkNotFoundError(
+                    "未找到符合条件的验证链接邮件",
+                    data={
+                        "email": email_addr,
+                        "upstream_errors": result.get("upstream_errors"),
+                    },
+                )
         raise MailNotFoundError(
             "未找到匹配邮件",
             data={
@@ -988,16 +1005,9 @@ def _extract_verification_with_memory_for_outlook(  # noqa: C901
     if result.get("new_refresh_token"):
         try:
             new_token = str(result.get("new_refresh_token") or "").strip()
-            if new_token and new_token != str(account.get("refresh_token") or ""):
-                from outlook_web.security.crypto import encrypt_data as _encrypt_data
-                from outlook_web.db import get_db
-
-                db = get_db()
-                db.execute(
-                    "UPDATE accounts SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (_encrypt_data(new_token), int(account["id"])),
-                )
-                db.commit()
+            if new_token and accounts_repo.update_refresh_token_if_changed(
+                int(account["id"]), new_token
+            ):
                 account["refresh_token"] = new_token
         except Exception:
             pass

@@ -9,6 +9,8 @@ from outlook_web.services.http import get_response_details
 
 # Token 端点
 TOKEN_URL_GRAPH = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default"
+GRAPH_MAIL_READ_SCOPES = ("Mail.Read", "Mail.ReadWrite")
 
 # Graph API 返回 401 时表示账号授权失效（与 token endpoint 失败不同）
 GRAPH_AUTH_EXPIRED_STATUS = 401
@@ -33,7 +35,7 @@ def get_access_token_graph_result(
                 "client_id": client_id,
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-                "scope": "https://graph.microsoft.com/.default",
+                "scope": GRAPH_DEFAULT_SCOPE,
             },
             timeout=30,
             proxies=proxies,
@@ -72,6 +74,7 @@ def get_access_token_graph_result(
             "success": True,
             "access_token": access_token,
             "refresh_token": new_refresh_token,
+            "new_refresh_token": new_refresh_token,
             "scope": payload.get("scope", ""),
         }
     except Exception as exc:
@@ -89,7 +92,7 @@ def get_access_token_graph_result(
 
 def has_mail_read_permission(scope: Any) -> bool:
     scope_str = str(scope or "")
-    return "Mail.Read" in scope_str or "Mail.ReadWrite" in scope_str
+    return any(mail_scope in scope_str for mail_scope in GRAPH_MAIL_READ_SCOPES)
 
 
 def get_access_token_graph(
@@ -274,7 +277,7 @@ def test_refresh_token_with_rotation(
                 "client_id": client_id,
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-                "scope": "https://graph.microsoft.com/.default",
+                "scope": GRAPH_DEFAULT_SCOPE,
             },
             timeout=30,
             proxies=proxies,

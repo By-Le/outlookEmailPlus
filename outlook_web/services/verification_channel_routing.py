@@ -22,6 +22,9 @@ VALID_VERIFICATION_CHANNELS = set(DEFAULT_VERIFICATION_CHANNEL_CHAIN)
 IMAP_SERVER_NEW = "outlook.live.com"
 IMAP_SERVER_OLD = "outlook.office365.com"
 
+# 验证码提取场景默认拉取最近 3 封，优先降低列表拉取开销。
+VERIFICATION_FETCH_TOP = 3
+
 
 def normalize_verification_channel(value: Any) -> Optional[str]:
     text = str(value or "").strip().lower()
@@ -354,27 +357,25 @@ def extract_verification_for_outlook(
     baseline_timestamp: Any = None,
 ) -> Dict[str, Any]:
     """Outlook OAuth 账号验证码提取统一入口（Web 端和 External API 均调用此函数）。"""
+    account_email = str(account.get("email") or "")
     preferred = normalize_verification_channel(
         account.get("preferred_verification_channel")
     )
     channel_plan = build_verification_channel_plan(preferred)
     channel_plan = channel_capability_cache.filter_channel_plan(
-        str(account.get("email") or ""), channel_plan
+        account_email, channel_plan
     )
 
     # Graph 权限预检：无 Mail.Read 权限时直接跳过 Graph 渠道。
     try:
-        from outlook_web.services.graph import (
-            get_access_token_graph_result,
-            has_mail_read_permission,
-        )
-
-        precheck = get_access_token_graph_result(
+        precheck = graph_service.get_access_token_graph_result(
             str(account.get("client_id") or ""),
             str(account.get("refresh_token") or ""),
             proxy_url or None,
         )
-        if precheck.get("success") and not has_mail_read_permission(
+        if precheck.get("new_refresh_token"):
+            account["refresh_token"] = str(precheck.get("new_refresh_token") or "")
+        if precheck.get("success") and not graph_service.has_mail_read_permission(
             precheck.get("scope", "")
         ):
             channel_plan = [ch for ch in channel_plan if not ch.startswith("graph_")]
@@ -385,32 +386,31 @@ def extract_verification_for_outlook(
     graph_auth_expired = False
     upstream_errors: Dict[str, Any] = {}
     last_extracted = None
-    new_refresh_token = None
+    precheck_obj = locals().get("precheck")
+    new_refresh_token = str((precheck_obj or {}).get("new_refresh_token") or "")
+    verification_attempted = False
 
     for channel in channel_plan:
         channel_result = fetch_emails_and_detail_for_channel(
             account=account,
             channel=channel,
             proxy_url=proxy_url,
-            top=20,
+            top=VERIFICATION_FETCH_TOP,
         )
 
         if not channel_result.get("success"):
             upstream_errors[channel] = channel_result.get("error")
             if channel.startswith("graph_") and channel_result.get("auth_expired"):
                 graph_auth_expired = True
-            channel_capability_cache.set_status(
-                str(account.get("email") or ""), channel, available=False
-            )
+            channel_capability_cache.set_status(account_email, channel, available=False)
             continue
 
         any_channel_read_success = True
-        channel_capability_cache.set_status(
-            str(account.get("email") or ""), channel, available=True
-        )
+        channel_capability_cache.set_status(account_email, channel, available=True)
 
         if channel_result.get("new_refresh_token"):
-            new_refresh_token = channel_result.get("new_refresh_token")
+            new_refresh_token = str(channel_result.get("new_refresh_token") or "")
+            account["refresh_token"] = new_refresh_token
 
         emails = channel_result.get("emails", [])
         if from_contains or subject_contains or since_minutes or baseline_timestamp:
@@ -444,6 +444,8 @@ def extract_verification_for_outlook(
 
         if not detail:
             continue
+
+        verification_attempted = True
 
         email_obj = _build_email_obj_from_channel_detail(detail=detail, latest=latest)
 
@@ -500,14 +502,6 @@ def extract_verification_for_outlook(
                 "new_refresh_token": new_refresh_token,
             }
 
-    if last_extracted:
-        return {
-            "success": True,
-            "data": last_extracted,
-            "channel_used": "",
-            "new_refresh_token": new_refresh_token,
-        }
-
     if not any_channel_read_success:
         return {
             "success": False,
@@ -518,10 +512,21 @@ def extract_verification_for_outlook(
             "graph_auth_expired": graph_auth_expired,
         }
 
+    if last_extracted or verification_attempted:
+        return {
+            "success": False,
+            "error_code": "VERIFICATION_NOT_FOUND",
+            "error_message": "未找到验证码或验证链接",
+            "error_status": 404,
+            "upstream_errors": upstream_errors,
+            "new_refresh_token": new_refresh_token,
+        }
+
     return {
         "success": False,
         "error_code": "EMAIL_NOT_FOUND",
         "error_message": "未找到匹配邮件",
         "error_status": 404,
         "upstream_errors": upstream_errors,
+        "new_refresh_token": new_refresh_token,
     }
