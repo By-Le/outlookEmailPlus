@@ -8,8 +8,9 @@ from outlook_web.errors import build_error_payload
 from outlook_web.services.http import get_response_details
 
 # Token 端点
-TOKEN_URL_GRAPH = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default"
+TOKEN_URL_TEMPLATE = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+TOKEN_URL_GRAPH = TOKEN_URL_TEMPLATE.format(tenant="common")
+DEFAULT_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 GRAPH_MAIL_READ_SCOPES = ("Mail.Read", "Mail.ReadWrite")
 
 # Graph API 返回 401 时表示账号授权失效（与 token endpoint 失败不同）
@@ -21,6 +22,12 @@ def build_proxies(proxy_url: str) -> Optional[Dict[str, str]]:
     if not proxy_url:
         return None
     return {"http": proxy_url, "https": proxy_url}
+
+
+def build_token_url(tenant: str | None = None) -> str:
+    """按 tenant 生成 Microsoft OAuth token endpoint。"""
+    normalized_tenant = (tenant or "common").strip() or "common"
+    return TOKEN_URL_TEMPLATE.format(tenant=normalized_tenant)
 
 
 def get_access_token_graph_result(
@@ -35,7 +42,7 @@ def get_access_token_graph_result(
                 "client_id": client_id,
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-                "scope": GRAPH_DEFAULT_SCOPE,
+                "scope": DEFAULT_GRAPH_SCOPE,
             },
             timeout=30,
             proxies=proxies,
@@ -68,7 +75,7 @@ def get_access_token_graph_result(
                 ),
             }
 
-        # 根据 Microsoft Learn 文档：refresh token 可能会在每次使用时“自我替换”，应保存新的 refresh_token（如有）。
+        # 根据 Microsoft Learn 文档：refresh token 可能会在每次使用时"自我替换"，应保存新的 refresh_token（如有）。
         new_refresh_token = payload.get("refresh_token")
         return {
             "success": True,
@@ -266,18 +273,24 @@ def test_refresh_token(
 
 
 def test_refresh_token_with_rotation(
-    client_id: str, refresh_token: str, proxy_url: str = None
+    client_id: str,
+    refresh_token: str,
+    proxy_url: str = None,
+    *,
+    tenant: str = "common",
+    scope: str = DEFAULT_GRAPH_SCOPE,
 ) -> tuple[bool, str | None, str | None]:
     """测试 refresh token 是否有效；如服务端返回新的 refresh_token，则一并返回（用于滚动更新）。"""
     try:
         proxies = build_proxies(proxy_url)
+        resolved_scope = (scope or DEFAULT_GRAPH_SCOPE).strip() or DEFAULT_GRAPH_SCOPE
         res = requests.post(
-            TOKEN_URL_GRAPH,
+            build_token_url(tenant),
             data={
                 "client_id": client_id,
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-                "scope": GRAPH_DEFAULT_SCOPE,
+                "scope": resolved_scope,
             },
             timeout=30,
             proxies=proxies,

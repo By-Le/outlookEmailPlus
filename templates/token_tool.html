@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token 获取工具 - OutlookEmailPlus</title>
+    <link rel="icon" type="image/png" href="/img/ico.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ APP_VERSION }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/token_tool.css') }}?v={{ APP_VERSION }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+</head>
+<body class="token-tool-body">
+    <main class="token-tool-shell">
+        <header class="token-tool-header">
+            <div>
+                <h1>🔑 OAuth Token 工具</h1>
+                <p>通过 Microsoft OAuth 获取 Token 并写入账号。支持个人 Microsoft 账号（Public Client、IMAP / Graph）。</p>
+            </div>
+            <button type="button" class="btn-inline ghost" onclick="window.close()">关闭</button>
+        </header>
+
+        <div id="statusMessage" class="token-status hidden" role="alert"></div>
+
+        <section class="token-card">
+            <div class="token-card-title">① OAuth 配置</div>
+            <div class="token-form-grid">
+                <label class="token-field">
+                    <span>Client ID</span>
+                    <input id="clientId" type="text" class="form-input" placeholder="请输入 Azure 应用 Client ID">
+                </label>
+                <label class="token-field">
+                    <span>Redirect URI</span>
+                    <input id="redirectUri" type="text" class="form-input" placeholder="https://example.com/token-tool/callback">
+                </label>
+                <div class="token-field token-field-full">
+                    <span>Scope</span>
+                    <div class="scope-editor">
+                        <div id="scopeChips" class="scope-chip-list"></div>
+                        <div class="scope-entry-row">
+                            <input id="scopeEntry" type="text" class="form-input" placeholder="输入 scope，支持空格 / 逗号 / 分号分隔">
+                            <button type="button" class="btn-inline" onclick="addScopeFromInput()">添加</button>
+                        </div>
+                        <div class="scope-presets">
+                            <button type="button" class="btn-inline ghost" onclick="setScopePreset('graph')">Graph 邮件</button>
+                            <button type="button" class="btn-inline ghost" onclick="setScopePreset('imap')">IMAP</button>
+                        </div>
+                        <small class="token-field-hint">推荐优先使用 IMAP 预设；如果你之前保存过旧的 Graph 默认 Scope，请切回 IMAP 预设并重新授权。</small>
+                        <input id="scopeValue" type="hidden" value="">
+                    </div>
+                </div>
+            </div>
+            <div class="token-action-row">
+                <label class="checkbox-inline">
+                    <input id="promptConsent" type="checkbox">
+                    <span>强制 Consent</span>
+                </label>
+                <div class="token-button-row">
+                    <button type="button" class="btn-inline" onclick="saveConfig()">保存配置</button>
+                    <button type="button" class="btn-inline primary" onclick="startOAuth()">获取授权链接</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="authorize-link-panel" class="token-card hidden">
+            <div class="token-card-title">② 授权链接</div>
+            <div class="token-field token-field-full">
+                <span>请在浏览器中打开以下链接完成授权</span>
+                <div class="authorize-link-row">
+                    <input id="authorizeUrl" type="text" class="form-input authorize-link-input" readonly>
+                    <button type="button" class="btn-inline" onclick="copyAuthorizeLink()">复制链接</button>
+                    <button type="button" class="btn-inline" onclick="openAuthorizeLink()">打开链接</button>
+                </div>
+                <small class="token-field-hint">授权完成后，浏览器会跳转到回调地址。请将地址栏中的完整 URL 复制并粘贴到下方「换取 Token」区域。</small>
+            </div>
+        </section>
+
+        <details id="manual-exchange" class="token-card token-details">
+            <summary>③ 换取 Token</summary>
+            <div class="token-details-body">
+                <label class="token-field token-field-full">
+                    <span>回调 URL</span>
+                    <textarea id="callbackUrl" class="form-input token-textarea" placeholder="粘贴完整回调地址，例如 http://localhost:5000/token-tool/callback?code=...&state=..."></textarea>
+                </label>
+                <div class="token-button-row">
+                    <button type="button" class="btn-inline primary" onclick="exchangeToken()">换取 Token</button>
+                </div>
+            </div>
+        </details>
+
+        <section id="result-panel" class="token-card hidden">
+            <div class="token-card-title">④ 结果</div>
+            <div id="resultSuccessBanner" class="token-success-banner hidden">✅ Token 获取成功</div>
+            <div class="result-grid">
+                <div class="result-item result-item-full">
+                    <label>Refresh Token</label>
+                    <textarea id="refreshTokenResult" class="form-input token-textarea" readonly></textarea>
+                    <button type="button" class="btn-inline" onclick="copyResultField('refreshTokenResult')">复制</button>
+                </div>
+                <div class="result-item result-item-full">
+                    <label>Access Token</label>
+                    <textarea id="accessTokenResult" class="form-input token-textarea" readonly></textarea>
+                    <button type="button" class="btn-inline" onclick="copyResultField('accessTokenResult')">复制</button>
+                </div>
+                <div class="result-item">
+                    <label>Client ID</label>
+                    <input id="clientIdResult" class="form-input" type="text" readonly>
+                    <button type="button" class="btn-inline" onclick="copyResultField('clientIdResult')">复制</button>
+                </div>
+                <div class="result-item">
+                    <label>Redirect URI</label>
+                    <input id="redirectUriResult" class="form-input" type="text" readonly>
+                    <button type="button" class="btn-inline" onclick="copyResultField('redirectUriResult')">复制</button>
+                </div>
+                <div class="result-item">
+                    <label>Requested Scope</label>
+                    <textarea id="requestedScopeResult" class="form-input token-textarea token-textarea-small" readonly></textarea>
+                </div>
+                <div class="result-item">
+                    <label>Granted Scope</label>
+                    <textarea id="grantedScopeResult" class="form-input token-textarea token-textarea-small" readonly></textarea>
+                </div>
+                <div class="result-item">
+                    <label>Audience</label>
+                    <input id="audienceResult" class="form-input" type="text" readonly>
+                </div>
+                <div class="result-item">
+                    <label>Scope Claim</label>
+                    <input id="scopeClaimResult" class="form-input" type="text" readonly>
+                </div>
+                <div class="result-item">
+                    <label>Roles Claim</label>
+                    <input id="rolesClaimResult" class="form-input" type="text" readonly>
+                </div>
+                <div class="result-item">
+                    <label>Expires In</label>
+                    <input id="expiresInResult" class="form-input" type="text" readonly>
+                </div>
+            </div>
+            <div class="token-button-row">
+                <button type="button" class="btn-inline" onclick="copyAllResults()">复制全部</button>
+                <button type="button" class="btn-inline primary" onclick="openSaveDialog()">写入到账号</button>
+            </div>
+        </section>
+    </main>
+
+    <dialog id="save-dialog" class="token-dialog">
+        <div class="token-dialog-header">
+            <h2>写入到账号</h2>
+            <button type="button" class="btn-inline ghost" onclick="closeSaveDialog()">关闭</button>
+        </div>
+        <div class="token-dialog-body">
+            <div id="saveDialogStatus" class="token-status token-dialog-status hidden"></div>
+            <label class="dialog-mode">
+                <input type="radio" name="saveMode" value="update" checked onchange="toggleSaveMode()">
+                <span>更新已有账号</span>
+            </label>
+            <div id="updateModeSection" class="dialog-section">
+                <label class="token-field token-field-full">
+                    <span>选择账号</span>
+                    <select id="accountSelect" class="form-input"></select>
+                </label>
+            </div>
+
+            <label class="dialog-mode">
+                <input type="radio" name="saveMode" value="create" onchange="toggleSaveMode()">
+                <span>创建新账号</span>
+            </label>
+            <div id="createModeSection" class="dialog-section hidden">
+                <label class="token-field token-field-full">
+                    <span>邮箱地址</span>
+                    <input id="newAccountEmail" type="email" class="form-input" placeholder="user@outlook.com">
+                </label>
+            </div>
+        </div>
+        <div class="token-dialog-footer">
+            <button type="button" class="btn-inline" onclick="closeSaveDialog()">取消</button>
+            <button type="button" class="btn-inline primary" onclick="confirmSaveToAccount()">确认写入</button>
+        </div>
+    </dialog>
+
+    <script src="{{ url_for('static', filename='js/i18n.js') }}?v={{ APP_VERSION }}"></script>
+    <script src="{{ url_for('static', filename='js/features/token_tool.js') }}?v={{ APP_VERSION }}"></script>
+</body>
+</html>

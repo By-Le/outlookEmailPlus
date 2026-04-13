@@ -1082,6 +1082,25 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
                 )
 
     raw_lines = account_str.splitlines()
+
+    # 合并续行：从其他地方复制的凭据中 refresh_token 可能包含换行符（行宽折行），
+    # splitlines() 会将其切碎；续行特征：不含 '----' 分隔符且不是注释行
+    _merged: list[str] = []
+    for _line in raw_lines:
+        _stripped = _line.strip()
+        if not _stripped:
+            continue
+        if (
+            _merged
+            and not _merged[-1].lstrip().startswith("#")
+            and "----" not in _stripped
+            and not _stripped.startswith("#")
+        ):
+            _merged[-1] += _stripped
+        else:
+            _merged.append(_stripped)
+    raw_lines = _merged
+
     imported = 0
     skipped = 0
     failed = 0

@@ -89,3 +89,37 @@ def get_proxy_fix_enabled() -> bool:
     默认：False（安全默认）
     """
     return env_true("PROXY_FIX_ENABLED", False)
+
+
+# ---- OAuth Token 工具 ----
+
+
+def get_oauth_tool_enabled() -> bool:
+    """是否启用 Token 获取工具。默认启用。"""
+    return env_true("OAUTH_TOOL_ENABLED", True)
+
+
+def get_oauth_client_id_default() -> str:
+    """OAuth 工具默认 Client ID（环境变量层）。"""
+    return _getenv("OAUTH_CLIENT_ID", "") or ""
+
+
+def get_oauth_client_secret_default() -> str:
+    """OAuth 工具默认 Client Secret（环境变量层）。"""
+    return _getenv("OAUTH_CLIENT_SECRET", "") or ""
+
+
+def get_oauth_redirect_uri_default() -> str:
+    """OAuth 工具默认 Redirect URI（环境变量层）。"""
+    return _getenv("OAUTH_REDIRECT_URI", "") or ""
+
+
+def get_oauth_scope_default() -> str:
+    """OAuth 工具默认 Scope（环境变量层）。"""
+    default_scope = "offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
+    return _getenv("OAUTH_SCOPE", default_scope) or default_scope
+
+
+def get_oauth_tenant_default() -> str:
+    """OAuth 工具默认 Tenant（环境变量层）。"""
+    return _getenv("OAUTH_TENANT", "consumers") or "consumers"

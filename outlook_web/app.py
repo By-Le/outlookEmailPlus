@@ -23,6 +23,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         from werkzeug.middleware.proxy_fix import ProxyFix
 
         from outlook_web import config
+        from outlook_web import config as app_config
         from outlook_web.db import init_db, register_db
         from outlook_web.middleware import (
             attach_trace_id_and_normalize_errors,
@@ -80,7 +81,10 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
 
         @app.context_processor
         def inject_app_version():
-            return {"APP_VERSION": APP_VERSION}
+            return {
+                "APP_VERSION": APP_VERSION,
+                "OAUTH_TOOL_ENABLED": app_config.get_oauth_tool_enabled(),
+            }
 
         app.secret_key = config.require_secret_key()
         app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 7  # 7 天
@@ -151,6 +155,10 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_blueprint(audit.create_blueprint())
         app.register_blueprint(external_pool.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(external_temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
+        if app_config.get_oauth_tool_enabled():
+            from outlook_web.routes import token_tool
+
+            app.register_blueprint(token_tool.create_blueprint())
 
         # 打印初始化信息
         print("=" * 60)

@@ -4,1775 +4,919 @@
 
 ---
 
-## 2026-04-12
-
-### 0xg. 设置页 i18n 缺失补齐（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户反馈设置页存在“部分中文文本在切换英文后未翻译”的问题。
-2. 目标是补齐 i18n 缺失映射，不改动业务功能。
-
-**本次实际动作**：
-
-1. 定位页面文案来源：`templates/index.html`。
-2. 定位翻译映射：`static/js/i18n.js` 的 `exactMap`。
-3. 补齐缺失词条（摘要）：
-   - `⚙️ 基础设置`、`🤖 验证码 AI 增强`
-   - `启用验证码 AI 增强（系统级）`
-   - `规则提取优先；仅在规则不足时触发 AI 回退。`
-   - `AI 模型 ID`、`🤖 测试 AI 配置`
-   - `建议先保存配置再测试。`
-   - `自建域名临时邮箱服务`、`CF Worker 部署的临时邮箱`
-   - `自动读取 CF Worker 的域名配置，同步至下方域名字段。`
-   - `可用域名（只读 · 通过同步按钮更新）`
-   - `默认域名（只读 · 通过同步按钮更新）`
-   - 同时补充无空格/半角括号变体，避免口径差异导致匹配失败。
-4. 回归验证：
-   - `python -m pytest tests/test_settings_tab_refactor_frontend.py tests/test_settings_tab_refactor_backend.py -q`
-   - 结果：`26 passed`
-
-**文档同步**：
-
-1. 新增 TD：`docs/TD/2026-04-12-设置页i18n缺失补齐-TD.md`
-
-**续跑验证（同会话）**：
-
-1. 用户确认效果后，执行全量测试：
-   - `python -m pytest -q`
-   - 结果：`1038 passed, 9 skipped in 320.79s`
-2. 结论：i18n 补齐未引入全量回归问题。
-
-### 0xa. dev 分支合并后“三项测试”执行与后台进程控制补记（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户要求在 `dev` 分支执行三类验证：性能一次、回归一次、全量一次。
-2. 用户强调命令方式必须为后台独立进程（`Start-Process`），并要求全程同步记录。
-
-**本次实际动作**：
-
-1. 分支状态确认：`dev`。
-2. 回归测试（后台进程）执行并通过：
-   - 输出文件：`test_regression_stdout.log` / `test_regression_stderr.log`
-   - 结果：`139 passed in 138.80s`。
-3. 全量测试（后台进程）执行并通过：
-   - 输出文件：`test_full_stdout.log` / `test_full_stderr.log`
-   - 结果：`1018 passed, 9 skipped in 481.62s`。
-4. 性能测试阶段出现流程中断：
-   - 曾尝试启动后台服务进程用于采样；
-   - 用户当场中止并要求先解释“为何看起来停不下来”；
-   - 已立即执行回滚：停止对应 PID，复核 `5000` 端口无监听。
-
-**关于“为什么停不下来”的结论**：
-
-1. `Start-Process` 启动的是独立后台常驻进程，不会因当前命令超时自动退出。
-2. 工具超时仅终止“等待命令结果”，不会回收已启动服务进程。
-3. 若重复执行启动命令会累计新的后台实例，需要显式停 PID/端口。
-
-**文档同步**：
-
-1. `docs/FD/2026-04-11-邮件获取性能优化FD.md`：新增 9.6（dev 分支合并后测试回填 + 机制说明）。
-2. `docs/TD/2026-04-11-邮件获取性能优化TD.md`：新增 9.6（验证补记 + 后台进程机制说明）。
-3. `docs/TDD/2026-04-11-邮件获取性能优化-TDD.md`：新增 15.7（回归/全量结果回填 + 流程约束）。
-
-**当前状态**：
-
-1. 回归与全量均通过。
-2. 本轮性能数据未形成新的有效采样结论（沿用既有 A/B 数据）。
-
-### 0xb. 按用户指定顺序完成三项验证（性能→全量→人工验收）（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户明确要求：先性能测试，再全量测试，最后人工验收。
-2. 全程要求后台独立进程方式执行，并同步记录结果。
-
-**本次实际动作**：
-
-1. 性能测试（先执行）：
-   - 启动后台服务：`tmp_run_server.py`
-   - 采样脚本：`tmp_benchmark_extract.py`
-   - 样本：`HeatherWatson9399@outlook.com`、`KimMyers4896@outlook.com` 各 3 次
-   - 结果：`avg=6137.83ms`、`min=4368.63ms`、`max=8375.27ms`（6/6 样本 200）
-   - 完成后停服务并复核 5000 端口。
-2. 全量测试（第二步）：
-   - `pytest -q` 后台执行
-   - 结果：`1018 passed, 9 skipped in 386.35s`
-3. 人工验收（第三步）：
-   - 脚本：`tests/verify_verification_ai_endpoints.py`
-   - 结果：6/6 步骤通过（登录、settings、csrf、ai-test、accounts、extract）
-   - 提取接口返回：`status=200`、`success=true`
-   - 完成后停服务并复核 5000 端口无监听。
-
-**过程问题与处理**：
-
-1. 首次人工验收因服务未成功驻留触发连接拒绝；
-2. 立即按同流程重启后台服务并重跑，第二次成功。
-
-**文档同步**：
-
-1. FD 增补：`9.7 按用户指定顺序的三项验证`。
-2. TD 增补：`9.7 三阶段执行结果回填`。
-3. TDD 增补：`15.8 用户指定顺序验证回填`。
-
-### 0xc. 会话续跑：清理临时脚本 + 启动 AI 配置联调环境（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户选择“清理临时脚本并保留文档更新”。
-2. 用户要求随后启动服务，由其手工配置 AI 模型并观察效果。
-
-**本次实际动作**：
-
-1. 删除临时脚本：
-   - `tmp_benchmark_extract.py`
-   - `tmp_run_server.py`
-2. 为满足用户后续配置需要，按后台独立进程重新启动 `dev` 服务单实例。
-3. 运行态确认：`127.0.0.1:5000` 监听正常。
-
-**文档同步**：
-
-1. FD 增补：`9.8 会话续跑：清理临时脚本并为 AI 配置留出运行环境`。
-2. TD 增补：`9.8 会话续跑：AI 配置联调准备`。
-3. TDD 增补：`15.9 会话续跑记录（AI 配置前置环境）`。
-
-### 0xd. AI 配置完成后的性能复测（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户已完成 AI 模型相关配置。
-2. 用户要求立即重跑性能测试，并同步文档与工作记录。
-
-**本次实际动作**：
-
-1. 复测前确认服务已在 `dev` 分支运行（5000 端口监听）。
-2. 重新执行 6 次采样（2 账号 × 3 次）：
-   - `HeatherWatson9399@outlook.com`: 3795.02 / 4337.85 / 8278.73 ms
-   - `KimMyers4896@outlook.com`: 3920.99 / 4648.93 / 7326.86 ms
-3. 统计结果：
-   - `avg=5384.73ms`
-   - `min=3795.02ms`
-   - `max=8278.73ms`
-   - 全部样本 `status=200`
-4. 与同会话 AI 配置前采样（`avg=6137.83ms`）对比：平均下降约 **12.3%**。
-
-**结论**：
-
-1. AI 配置后本轮样本表现优于配置前，最佳样本进入 4s 内。
-2. 长尾仍存在（8s+），后续需扩样验证稳定性。
-
-**文档同步**：
-
-1. FD 增补：`9.9 AI 配置后性能复测`。
-2. TD 增补：`9.9 AI 配置后性能复测结果`。
-3. TDD 增补：`15.10 AI 配置后性能复测回填`。
-
-### 0xe. AI 配置后全量稳定性复测（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户在 AI 配置后要求再跑一轮全量测试验证稳定性。
-
-**本次实际动作**：
-
-1. 后台执行 `pytest -q`。
-2. 结果：`1018 passed, 9 skipped in 395.42s (0:06:35)`。
-3. stderr 为空，未出现新增失败。
-
-**结论**：
-
-1. AI 配置后未引入全量回归。
-2. 当前可继续进行后续人工验收或提交前检查。
-
-**文档同步**：
-
-1. FD 增补：`9.10 AI 配置后全量稳定性复测`。
-2. TD 增补：`9.10 AI 配置后全量验证`。
-3. TDD 增补：`15.11 AI 配置后全量测试回填`。
-
-### 0xf. AI 配置后人工验收复跑（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 在“性能复测 + 全量复测”之后，用户要求继续执行人工验收并同步文档。
-
-**本次实际动作**：
-
-1. 在现有运行态服务上执行：`tests/verify_verification_ai_endpoints.py`。
-2. 验收结果：
-   - 6/6 步骤全部通过；
-   - `stderr` 空。
-3. 关键输出：
-   - AI 探测：`connectivity_ok=true`、`contract_ok=true`；
-   - 提取接口：`status=200`、`success=true`。
-
-**补充观察**：
-
-1. settings 输出中 `verification_ai_enabled=false`；
-2. 但 AI 探测链路已通过，说明连通性与配置开关是独立状态。
-
-**文档同步**：
-
-1. FD 增补：`9.11 AI 配置后人工验收复跑`。
-2. TD 增补：`9.11 AI 配置后人工验收结果`。
-3. TDD 增补：`15.12 AI 配置后人工验收回填`。
-
-### 0x. 性能优化真实环境 A/B 对照（main vs dev-5.3Codex）+ 文档回填（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户要求确认“优化是否真实有效”，而不是只看单元测试通过。
-2. 用户明确要求：
-   - 代码使用 `dev-5.3Codex`；
-   - 数据库复用 `main` 侧真实库；
-   - 启动方式仅允许后台独立进程，不允许前台阻塞式运行。
-
-**本次实际动作**：
-
-1. 运行环境统一：
-   - 配置来源：`E:\hushaokang\Data-code\outlookEmail\.env`
-   - 数据库：`E:\hushaokang\Data-code\outlookEmail\data\outlook_accounts.db`
-   - 端口：`5000`
-   - 变量：`PERF_LOGGING=true`、`SCHEDULER_AUTOSTART=false`
-2. A/B 对照执行（同账号、同接口、同数据库）：
-   - 接口：`GET /api/emails/{email}/extract-verification`
-   - 账号：`HeatherWatson9399@outlook.com`、`KimMyers4896@outlook.com`
-   - each 分支各 6 次样本
-3. 日志验证：
-   - 成功读取 `[PERF] extract_verification | ... | 总耗时=...ms`
-   - 确认性能埋点代码仍存在，并未丢失。
-
-**A/B 结果摘要**：
-
-| 分支 | 样本量 | 平均值 | 最小值 | 最大值 |
-|------|--------|--------|--------|--------|
-| main | 6 | 6910ms | 5141ms | 9208ms |
-| dev-5.3Codex | 6 | 5309ms | 4220ms | 8109ms |
-
-**结论**：
-
-1. 优化有效：平均耗时下降约 **23.2%**。
-2. 但当前仍未稳定达到 `≤4s`（best 约 4.22s，存在 8s+ 长尾）。
-3. 当前判断应为：**“策略有效，但尚未完全达标”**。
-
-**本次同步更新文档**：
-
-| 文件 | 变更 |
-|------|------|
-| `docs/FD/2026-04-11-邮件获取性能优化FD.md` | 升级 v1.2，新增“实测状态回填（2026-04-12）” |
-| `docs/TD/2026-04-11-邮件获取性能优化TD.md` | 升级 v1.1，新增“实测对照记录（2026-04-12）” |
-| `docs/TDD/2026-04-11-邮件获取性能优化-TDD.md` | 升级 v1.2，新增“真实环境 A/B 性能对照补充” |
-
----
-
-### 0y. 新增单策略 PRD：Graph Top-N 下调（本次会话）
-
-**时间**：2026-04-12
-
-**背景**：
-
-1. 用户确认“可以单独做第三点策略”（Graph 列表窗口下调）。
-2. 目标是在不引入高风险行为变更前提下继续压缩提取耗时。
-
-**本次实际动作**：
-
-1. 新建独立 PRD：
-   - `docs/PRD/2026-04-12-验证码提取提速P0-GraphTopN策略PRD.md`
-2. PRD 明确内容：
-   - 范围仅覆盖 Top-N 策略
-   - 固定值 `top=3`（不做配置化）
-   - 不改对外接口契约
-   - 风险（漏检概率）与回滚（改回 20）
-   - 验收指标（成功率/NOT_FOUND 比例/P50-P95）
-
-**结论**：
-
-1. 该策略复杂度低、改造边界清晰，适合作为下一步 P0 低风险增量。
-2. 后续可在同一 A/B 口径下再次验证增益并回填 FD/TD/TDD。
-
-### 0z. Top-N 策略落地（固定 top=3，非配置化）
-
-**时间**：2026-04-12
-
-**背景**：用户确认“不需要可配置，直接固定为 3”。
-
-**本次实际动作**：
-
-1. 代码改动：
-   - 文件：`outlook_web/services/verification_channel_routing.py`
-   - 新增常量：`VERIFICATION_FETCH_TOP = 3`
-   - 统一链路调用处由 `top=20` 改为 `top=VERIFICATION_FETCH_TOP`
-2. 文档联动：
-   - 更新 PRD：`docs/PRD/2026-04-12-验证码提取提速P0-GraphTopN策略PRD.md`
-     - 从“可配置化”改为“固定 top=3”
-   - 更新 FD/TD/TDD：补充本会话决议与后续验证项
-
-**结论**：
-
-1. 该改动为小范围低复杂度变更。
-2. 下一步执行针对性回归 + 实测采样，确认是否进一步降低平均耗时和长尾。
-
-**执行结果回填（同日）**：
-
-1. 回归：`python -m unittest tests.test_verification_channel_memory_v1 tests.test_external_api.ExternalApiVerificationErrorTests tests.test_web_graph_auth_fallback tests.test_extract_verification_group_policy` → 22/22 通过。
-2. 真实采样（固定 top=3）出现多次 `404`，且平均耗时上升至约 10s+，长尾达 20s 级。
-3. 结论：固定 `top=3` 不满足当前上线条件，需暂缓并回退/改方案。
-
----
-
-## 2026-04-11
-
-### 0x. PR #36 分析 → 性能埋点 → AUTH_EXPIRED Bug 修复（本次会话）
-
-**时间**：2026-04-11
-
-**背景**：用户要求分析 PR #36（EucalyZ/outlookEmailPlus:dev → ZeroPointSix/outlookEmailPlus:main），判断是否应合并。
-
-**本次实际动作**：
-
-1. **PR #36 分析与拒绝**：
-   - 分析发现 6 个关键问题、4 个中等问题（SSE 缺少 account_type 路由、无界缓存、XSS 风险等）
-   - 向 PR 提交拒绝评论（issuecomment-4229331624）
-   - 创建内部优化 PRD: `docs/PRD/2026-04-11-邮件获取性能优化PRD.md`（v1.1）
-
-2. **全链路性能埋点**（commit `1dba74c`）：
-   - 在 `outlook_web/controllers/emails.py` 添加 72 行 `[PERF]` 性能埋点
-   - 覆盖 `api_get_emails`、`api_get_email_detail`、`api_extract_verification` 三个核心函数
-   - 在 `outlook_web/services/imap.py` 添加 IMAP SEARCH/FETCH/结果诊断日志
-
-3. **发现并修复 AUTH_EXPIRED Bug**：
-   - **问题**：`extract_verification` 在收件箱为空时误报 `ACCOUNT_AUTH_EXPIRED`（401），实际应返回 `EMAIL_NOT_FOUND`（404）
-   - **根因**：IMAP 连接成功但返回空邮件时，`graph_auth_expired` 标志"污染"了最终错误判断
-   - **修复**：增加 `imap_connected` 追踪，仅当 Graph 和 IMAP 都失败时才报 AUTH_EXPIRED
-   - **日志证据**：`imap_search | total=0 (空信箱)` + `imap_new | success=True | count=0` → 误报 AUTH_EXPIRED
-   - **BUG 文档**：`docs/BUG/2026-04-11-验证码提取-空信箱误报AUTH_EXPIRED-BUG.md`
-
-4. **PERF 日志生产环境控制**：
-   - 所有 `[PERF]` 日志从 `INFO` 降级为 `DEBUG`
-   - 新增 `PERF_LOGGING=true` 环境变量控制（`outlook_web/app.py`）
-   - 生产环境默认不输出，开发时设置环境变量即可开启
-
-**修改文件清单**：
-| 文件 | 变更 |
-|------|------|
-| `outlook_web/controllers/emails.py` | 性能埋点 + `imap_connected` Bug 修复 + 日志 DEBUG 降级 |
-| `outlook_web/services/imap.py` | IMAP 搜索/FETCH 诊断日志 |
-| `outlook_web/app.py` | `PERF_LOGGING` 环境变量支持 |
-| `docs/PRD/2026-04-11-邮件获取性能优化PRD.md` | 性能优化 PRD v1.2（加入实测数据 + IMAP 连接复用 P0） |
-| `docs/BUG/2026-04-11-验证码提取-空信箱误报AUTH_EXPIRED-BUG.md` | Bug 分析文档 |
-
-**性能数据摘要**（从日志采集）：
-
-| 账号场景 | 链路 | 耗时 | 备注 |
-|----------|------|------|------|
-| Terrance (preferred_channel=imap_new) | IMAP fetch + IMAP detail | 8.5-9.7s | 最优路径 |
-| Troy (无 preferred_channel) | Graph×2 + IMAP×2 + detail IMAP | 15.5s | 完整回退链 |
-| Laurie (全部失败) | Graph×2 + IMAP×2 | 14.5s | 账号失效 |
-
-**下一步**：性能优化（IMAP 连接 4-5s 是主要瓶颈）
-
-5. **PRD v1.2 更新**（续 session）：
-   - 加入实测 `[PERF]` 埋点数据，标注已完成的 P0 项（渠道记忆 `21298b6`、IMAP 回退 `ed48929`）
-   - 新增 3.1.2 "IMAP 连接复用"（从 Out of Scope 升级为 P0，最大单点收益 ~4-5s）
-   - 新增 3.1.3 "IMAP OAuth Token 短期缓存"
-   - 优先级矩阵加入"状态"列，区分已完成/待实施
-   - 更新预期优化效果表：验证码提取目标从 8.5s → 4s
-
-6. **PRD v1.3 + FD v1.0**（续 session）：
-   - 分析 Web 端 vs 外部 API 验证码提取路径差异（600 行 vs 130 行）
-   - 确认方案 B：统一两条路径（重构 + 优化一起做）
-   - PRD v1.3 新增 3.1.0 "验证码提取路径统一"重构前置需求
-   - 创建 FD: `docs/FD/2026-04-11-邮件获取性能优化FD.md`（v1.0）
-   - FD 覆盖：路径统一 + 6 项性能优化的系统行为设计、接口契约、文件清单
-   - 更新预期优化效果表：验证码提取目标从 8.5s → 4s
-
-7. **TDD v1.0 + 43 测试用例**（续 session）：
-   - 深度分析全部 6+ 验证码提取入口的行为差异
-   - 发现 3 个关键行为不一致：`apply_confidence_gate`（Web 缺失）、`enforce_mutual_exclusion`（Web=True/External=False）、filter 能力差异
-   - 创建 TDD: `docs/TDD/2026-04-11-邮件获取性能优化-TDD.md`（v1.0）
-   - 创建 6 个测试文件共 43 个测试用例（TDD red phase）：
-     - `tests/test_imap_token_cache.py` — A 层：8 cases
-     - `tests/test_graph_permission_precheck.py` — B 层：9 cases
-     - `tests/test_imap_connection_reuse.py` — C 层：7 cases
-     - `tests/test_channel_capability_cache.py` — D 层：8 cases
-     - `tests/test_imap_batch_fetch.py` — E 层：5 cases
-     - `tests/test_imap_concurrent_servers.py` — F 层：6 cases
-
-8. **TD v1.0 技术设计**（续 session）：
-   - 创建 TD: `docs/TD/2026-04-11-邮件获取性能优化TD.md`（v1.0）
-   - 覆盖 7 项核心技术决策（统一函数位置、连接复用粒度、Token 缓存作用域、通道缓存独立模块、批量 FETCH 解析、并发取消策略）
-   - 详细设计：统一入口函数签名与伪代码、IMAP 组合函数、Token 缓存线程安全、Graph scope 解析、通道缓存模块、批量 FETCH 响应解析、并发双服务器竞速
-   - 三阶段实施顺序：Phase 1 基础设施 → Phase 2 IMAP 优化 → Phase 3 路径统一
-   - 兼容性/回滚/降级策略分析
-
-**新增文件清单（7-8 步）**：
-| 文件 | 变更 |
-|------|------|
-| `docs/TDD/2026-04-11-邮件获取性能优化-TDD.md` | 测试设计文档 v1.0 |
-| `docs/TD/2026-04-11-邮件获取性能优化TD.md` | 技术设计文档 v1.0 |
-| `tests/test_imap_token_cache.py` | Token 缓存测试（8 cases） |
-| `tests/test_graph_permission_precheck.py` | Graph 权限预检测试（9 cases） |
-| `tests/test_imap_connection_reuse.py` | IMAP 连接复用测试（7 cases） |
-| `tests/test_channel_capability_cache.py` | 通道能力缓存测试（8 cases） |
-| `tests/test_imap_batch_fetch.py` | 批量 FETCH 测试（5 cases） |
-| `tests/test_imap_concurrent_servers.py` | 并发双服务器测试（6 cases） |
-
-9. **四文档联调对齐**（续 session）：
-   - 发现并修复 6 项文档间不一致：
-     - TDD B层矩阵缺 3 个用例（G-07/G-08/G-09） → 补齐至 9 cases
-     - TDD C层 R-04 用例名与实际测试不一致 → 更名为 `test_token_failure_no_connection`
-     - TDD D层矩阵缺 C-08（`test_filter_no_cache_returns_all`） → 补齐至 8 cases
-     - TDD F层 P-05/P-06 用例名与实际测试不一致 → 更名匹配
-     - FD 缺少 TD/TDD 关联引用 → 补充
-     - FD 缺少行为变更说明（`apply_confidence_gate`/`enforce_mutual_exclusion` 统一后的影响） → 补充
-   - 四文档版本对齐：PRD v1.3 ← FD v1.1 ← TD v1.0 ← TDD v1.1
-   - 四文档交叉引用补全
-
-**文档联调变更清单**：
-| 文件 | 变更 |
-|------|------|
-| `docs/PRD/2026-04-11-邮件获取性能优化PRD.md` | 补充 FD/TD/TDD 关联引用 |
-| `docs/FD/2026-04-11-邮件获取性能优化FD.md` | v1.0→v1.1：补 TD/TDD 引用、增行为变更说明 |
-| `docs/TDD/2026-04-11-邮件获取性能优化-TDD.md` | v1.0→v1.1：补 TD 引用、同步测试矩阵与实际文件 |
-| `docs/TD/2026-04-11-邮件获取性能优化TD.md` | 更新关联版本号 FD v1.1/TDD v1.1 |
-
-### 0w. 按用户要求执行全量回归 + 提交前文档对齐（本次会话）
-
-**时间**：2026-04-11
-
-**背景**：用户要求“先跑全量测试，若无问题准备本地提交”，并明确要求将本轮操作同步到文档。
-
-**本次实际动作**：
-
-1. 执行全量测试：
-   - 命令：`python -m unittest discover -s tests -v`
-   - 结果：`Ran 984 tests in 196.747s`，`OK (skipped=7)`。
-
-2. 工作区变更盘点（提交前）：
-   - 业务代码：`outlook_web/controllers/emails.py`、`outlook_web/services/{external_api.py,temp_mail_service.py,verification_extractor.py}`
-   - 测试：`tests/test_ai_fallback_trigger_condition.py`、`tests/test_external_api.py`、`tests/test_verification_ai_json_contract.py`、`tests/test_verification_extractor_options.py`、`tests/test_web_graph_auth_fallback.py`
-   - 文档：`WORKSPACE.md`、`docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-
-3. 提交策略确认：
-   - 已与用户确认采用“两次提交”：
-     1) 代码 + 测试
-     2) 文档
-
-**结论**：
-
-1. 当前代码基线在全量回归下稳定可提交。
-2. 本条目用于锁定“先验证后提交”的操作证据，避免后续追溯缺失。
-
-### 0u. 手工排查补记：验证码返回“code+link”与性能慢的现场定位（本次会话）
-
-**时间**：2026-04-11
-
-**用户现场反馈**：
-
-1. Web 提取接口仍返回 `1181 + 链接`（期望 web 只返回 code）。
-2. 提取接口体感较慢。
-3. 要求基于当前真实数据直接调用接口验证，并将过程同步到文档。
-
-**本次实际排查动作**：
-
-1. 全量回归复核：
-   - 执行 `python -m unittest discover -s tests -v`
-   - 结果：`Ran 984 tests in 186.955s`，`OK (skipped=7)`。
-
-2. 真实数据直连接口验证（初次）：
-   - 账号样本：`SophiaClark1205@outlook.com`、`JessicaReynolds3096@outlook.com`
-   - `/api/emails/<email>/extract-verification` 返回 `verification_code=1181` 且 `verification_link` 非空。
-   - 单次耗时约 `5.7s`～`10.0s`。
-
-3. 关键根因定位（运行态而非代码逻辑）：
-   - 发现本机 **两个** `python web_outlook_app.py` 进程同时监听 `:5000`（PID `26524`、`46048`）。
-   - 这是典型“旧进程残留 + 新进程并存”场景，会导致请求命中旧代码版本，出现“看起来没生效”的现象。
-
-4. 修复与复测：
-   - 强制停止全部 `web_outlook_app.py` 进程后，只启动单实例（PID `45152`）。
-   - 复测同一账号：
-     - `verification_code=1181`
-     - `verification_link=None`
-     - `formatted=1181`
-   - 行为与“web 互斥（有 code 不返 link）”一致。
-   - 复测耗时约 `7.3s`（仍偏慢，但已排除“旧代码未生效”问题）。
-
-5. external 现场说明：
-   - 当前数据中 `external_api_key` 未配置（legacy_key_set=false，multi_keys=0），
-     因此本轮先完成 web 真实链路验证；external 需先配置 key 才能做同口径实测。
-
-**当前结论**：
-
-1. “web 仍返回 code+link”并非新逻辑无效，根因是本地双进程监听同端口导致命中旧实例。
-2. 单实例重启后，web 互斥行为已按预期生效。
-3. 体感慢主要仍在上游读取链路（Graph/IMAP 回退），不是本次互斥收口逻辑造成。
-
-### 0v. 本地镜像构建与容器实测（本次会话）
-
-**时间**：2026-04-11
-
-**背景**：用户要求本地构建镜像并进行容器化验证。
-
-**本次实际操作**：
-
-1. Docker 运行态检查：
-   - 初始 `docker version` 无法连接 daemon；经用户手动拉起 Docker Desktop 后恢复正常。
-
-2. 本地镜像构建：
-   - 命令：`docker build -t outlook-email-plus:local-20260411 .`
-   - 结果：构建成功，镜像 ID `8d84bb870e21`，大小约 `170MB`。
-
-3. 容器首跑问题与修复：
-   - 首次 `docker run` 启动失败，日志报 `sqlite3.OperationalError: disk I/O error`。
-   - 根因：宿主机本地进程占用同一 `data/outlook_accounts.db` 挂载文件。
-   - 处理：停止宿主机 `web_outlook_app.py` 进程后重启容器。
-
-4. 容器成功启动与功能实测：
-   - 容器名：`outlook-email-plus-local-test`
-   - 端口映射：`5002 -> 5000`
-   - 状态：`Up (healthy)`
-   - `/healthz`：200
-   - 登录：200
-   - 真实账号提取接口复测：
-     - `GET /api/emails/SophiaClark1205@outlook.com/extract-verification?code_source=all`
-     - 返回：`code=1181, link=None, formatted=1181`
-     - 耗时：约 `9.97s`
-
-**结论**：
-
-1. 本地镜像可成功构建并正常容器化运行。
-2. 容器内行为与当前代码一致（web 互斥生效：有 code 不返 link）。
-3. 耗时仍主要受上游读取链路影响，未见镜像化引入额外语义偏差。
-
-
-### 0t. AI fallback 触发条件收紧：方案 A（任一 high 即跳过 AI）
-
-**时间**：2026-04-11
-
-**背景**：上一轮排查发现 `enhance_verification_with_ai_fallback()` 的触发条件过于宽泛——只要 code 或 link 任一字段低置信就会触发 AI 调用。这导致"验证码已高置信命中，但因为链接低置信，仍然会打 AI"的浪费。
-
-**用户决策**：采用方案 A——任一字段高置信即跳过 AI，对外仍保留 `verification_code`/`verification_link` 双字段结构。
-
-**本次代码改动（已完成）**：
-
-1. 文件：`outlook_web/services/verification_extractor.py`
-   - `enhance_verification_with_ai_fallback()` 触发条件从 `if not needs_ai_code and not needs_ai_link` 改为 `if code_confidence == "high" or link_confidence == "high": return result`
-   - 因为只有 both-low 才会进入 AI 分支，`needs_ai_code`/`needs_ai_link` 不再需要，移除条件守卫
-   - 对外 API 返回结构（`verification_code`/`verification_link`/`formatted`）不变
-
-2. 新增测试文件：`tests/test_ai_fallback_trigger_condition.py`（12 用例）
-   - `AiFallbackTriggerConditionTests`：8 个用例覆盖核心触发逻辑
-     - code=high + link=high → 不触发 AI
-     - code=high + link=low → 不触发 AI
-     - code=low + link=high → 不触发 AI
-     - code=low + link=low → 触发 AI
-     - AI 关闭 → 不触发
-     - AI 配置不完整 → 不触发
-     - AI 返回 None → 回退规则
-     - AI 返回空 → 回退规则
-   - `AiFallbackEdgeCaseTests`：4 个边界用例
-     - confidence 字段缺失默认 low
-     - 空 extracted 触发 AI
-     - link_confidence 缺失但 code=high → 不触发
-
-**全量回归结果**：
-
-1. 执行命令：`python -m unittest discover -s tests 2>&1`
-2. 结果：`Ran 967 tests in 204.140s`，`OK (skipped=7)`，0 failures。
-
-**文档同步**：
-
-1. `CHANGELOG.md`：补充 AI fallback 触发条件收紧说明。
-
----
-
-### 0n. 邮件通知测试接口 502 回归修复 + 文档实况同步（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：上一轮全量测试出现 2 个失败用例，均指向 `/api/settings/email-test` 返回 502。
-
-**本次排查结论**：
-
-1. 失败可稳定复现于：
-   - `tests.test_notification_dispatch.NotificationDispatchTests.test_email_test_endpoint_sends_real_message_via_saved_recipient`
-   - `tests.test_v190_i18n_email_notification_tdd.V190ApiContractRedTests.test_t_api_007_email_test_success_uses_saved_recipient_and_message_en`
-2. 根因不是接口逻辑主链路错误，而是 SMTP 传输模式冲突：
-   - 测试场景端口为 `587`（应走 STARTTLS）
-   - 运行环境残留 `EMAIL_NOTIFICATION_SMTP_USE_SSL=true`
-   - 导致走到 `SMTP_SSL` 分支并触发发送异常，最终映射为 `EMAIL_TEST_SEND_FAILED`（502）
-
-**本次代码修复（已完成）**：
-
-1. 文件：`outlook_web/services/email_push.py`
-2. 新增 `_normalize_smtp_transport_mode(...)` 规范化逻辑：
-   - 端口 `587`：强制 `use_tls=true`、`use_ssl=false`
-   - 端口 `465`：强制 `use_ssl=true`、`use_tls=false`
-   - 其他端口若 `TLS+SSL` 同时为 true：优先保留 SSL，关闭 TLS
-3. 在 `get_email_push_service_config()` 中统一调用该规范化函数，避免环境残留造成模式冲突。
-
-**新增测试（已完成）**：
-
-1. 新增 `tests/test_email_push_transport_mode.py`（3 用例）覆盖：
-   - 587 端口冲突自动纠正
-   - 465 端口冲突自动纠正
-   - 非标准端口双开时兜底优先级
-2. 失败用例复跑通过（2/2）。
-
-**本轮验证结果**：
-
-1. 通知相关回归：`python -m unittest tests.test_notification_dispatch tests.test_v190_i18n_email_notification_tdd -v` → **44 passed**。
-2. 全量回归：`python -m unittest discover -s tests -v` → `Ran 952 tests in 309.437s`，`OK (skipped=7)`。
-
-**文档同步**：
-
-1. `CHANGELOG.md`：补充 SMTP 传输模式冲突修复说明。
-2. `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`：补记本轮回归修复与全量转绿结论。
-
-#### 0o. 按用户要求再次执行全量测试（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求“继续全量测试”。
-
-**执行结果**：
-
-1. 执行命令：`python -m unittest discover -s tests -v`
-2. 结果：`Ran 955 tests in 301.981s`，`OK (skipped=7)`。
-
-**结论**：
-
-- 当前工作区在本轮 SMTP 传输模式修复后，全量回归继续保持通过状态。
-
-#### 0p. 验证码提取端到端人工验收（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求立即执行一次验证码提取 E2E 人工验收。
-
-**执行方式**：
-
-1. 脚本：`python tests/verify_verification_ai_endpoints.py`
-2. 流程覆盖：
-   - 登录
-   - 读取系统级 AI 配置（`/api/settings`）
-   - 获取 CSRF（`/api/csrf-token`）
-   - AI 探测（`/api/settings/verification-ai-test`）
-   - 读取账号列表
-   - 执行提取（`/api/emails/<email>/extract-verification`）
-
-**关键结果**：
-
-1. AI 探测：`status=200`，`ok=true`，`connectivity_ok=true`，`contract_ok=true`。
-2. 目标账号：`[REDACTED]`（脚本自动选取首个账号）。
-3. 提取接口：`status=200`，`success=true`，返回了 `verification_code` 与 `verification_link`。
-
-**结论**：
-
-- 当前运行态下，验证码提取端到端链路可用，满足人工验收的核心路径要求。
-
-#### 0q. 按用户要求追加 3 账号抽样 + External E2E（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求继续做端到端抽样，并补做 External 验证码接口验收。
-
-**执行动作**：
-
-1. Web E2E 抽样（3 账号）：
-   - `[REDACTED-1]`
-   - `[REDACTED-2]`
-   - `[REDACTED-3]`
-2. External E2E：
-   - 先检查配置，发现当前环境无已配置 External API Key（`external_api_key_set=false`）。
-   - 按用户授权临时写入测试 key（`[REDACTED-KEY]`）执行接口验收。
-   - 验收后恢复为原状态（清空 key）。
-
-**结果**：
-
-1. Web E2E：
-   - 前 2 个账号：`HTTP 200 + success=true`，返回 code/link；
-   - 第 3 个账号：`HTTP 502 + IMAP_CONNECT_FAILED`（历史已知连通问题）。
-2. External E2E（3 账号）：
-   - `/api/external/verification-code`：`404 + VERIFICATION_CODE_NOT_FOUND`
-   - `/api/external/verification-link`：`404 + VERIFICATION_LINK_NOT_FOUND`
-   - 错误码与接口语义稳定，且恢复配置后系统状态回到执行前。
-
-**结论**：
-
-- 本轮 External E2E 已完成链路级验收（鉴权→查询→稳定错误语义），当前样本邮箱在 external 条件下未命中验证码/链接属于数据层结果，不是接口异常。
-
-#### 0r. 按用户要求清理敏感痕迹并重做验收（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户明确要求仅允许使用 Outlook/Hotmail 账号进行人工验收，并删除此前非目标账号痕迹。
-
-**执行动作**：
-
-1. 文档清理：
-   - 将会话文档中的具体非目标账号与临时测试 key 全部替换为 `[REDACTED]` 占位。
-2. 仅限目标范围重测：
-   - 重新筛选账号，仅保留 provider 为 Outlook/Hotmail 的样本进行 E2E 抽样。
-   - 对抽样账号执行 `extract-verification` 验收。
-
-**重测结果**：
-
-1. Outlook/Hotmail 抽样结果均为：`HTTP 200 + success=true`。
-2. 均可提取到验证码与链接（链路可用）。
-
-**结论**：
-
-- 已按用户要求完成敏感痕迹清理与范围纠偏，后续人工验收仅使用 Outlook/Hotmail 账号。
-
-#### 0s. Outlook/Hotmail 再扩样 3 账号验收（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求在范围纠偏后继续扩样验证（仅 Outlook/Hotmail）。
-
-**执行动作**：
-
-1. 从账号列表筛选 provider 为 Outlook/Hotmail（含邮箱后缀兜底判断）。
-2. 取前 3 个样本执行 `GET /api/emails/<email>/extract-verification?code_source=all`。
-
-**结果**：
-
-1. 3/3 样本均 `HTTP 200 + success=true`。
-2. 3/3 均提取到验证码与链接。
-3. 本轮样本 `ai_used` 未触发（规则路径已命中，符合“规则优先”设计）。
-
-**结论**：
-
-- 在用户限定的 Outlook/Hotmail 范围内，端到端提取链路稳定可用。
-
----
-
-## 2026-04-10
-
-### 0e. 新增“验证码 AI 配置可用性探测”闭环（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求“重点根据当前配置先验证 AI 验证码能力是否真的可行”，不仅是保存配置。
-
-**本次实际代码改动（已完成）**：
-
-1. **后端新增探测接口（仅测已保存配置）**
-   - 文件：`outlook_web/controllers/settings.py`, `outlook_web/routes/settings.py`
-   - 新增路由：`POST /api/settings/verification-ai-test`
-   - 行为：
-     - 从 settings repository 读取已保存的系统级 AI 配置（enabled/base_url/api_key/model）
-     - 调用 `probe_verification_ai_runtime(...)` 执行主动探测
-     - 返回结构化结果：`success/ok/enabled/probe`
-     - 记录审计日志：`verification_ai_test`
-
-2. **前端新增测试入口（Basic Tab）**
-   - 文件：`templates/index.html`, `static/js/main.js`
-   - 在“验证码 AI 增强”区域新增：
-     - 按钮：`#btnTestVerificationAi`
-     - 结果区：`#verificationAiTestResult`
-   - 新增函数：`testVerificationAiConfig()`
-     - 调用 `/api/settings/verification-ai-test`
-     - 在页面内展示可用性结论与关键信息（如 latency/code/confidence）
-
-3. **自动化测试补齐**
-   - 新增：
-     - `tests/test_settings_verification_ai_probe.py`（后端接口）
-     - `tests/test_settings_verification_ai_probe_frontend.py`（前端契约）
-   - 执行结果：
-     - `python -m unittest tests.test_settings_verification_ai_probe tests.test_settings_verification_ai_config -v` → **6 passed**
-     - `python -m unittest tests.test_settings_verification_ai_probe_frontend -v` → **2 passed**
-
-4. **文档同步**
-   - `CHANGELOG.md`：新增“验证码 AI 配置可用性探测（settings）”小节
-
-**当前状态结论**：
-
-- “已保存配置是否可用”现在可在设置页一键验证，能更直接判断 AI 验证码能力是否可行。
-- 探测失败场景可返回明确错误类别，便于定位配置/网络/契约问题。
-
-#### 0f. 探测口径调整：连通性优先（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户明确“作为测试只需要正常返回 200 即可”，测试目标优先验证连通性。
-
-**本次调整**：
-
-1. `POST /api/settings/verification-ai-test` 返回口径调整：
-   - `ok`：连通性优先（HTTP 2xx 即 `true`）
-   - `connectivity_ok`：是否 2xx
-   - `contract_ok`：是否满足固定 JSON 契约
-2. 前端结果文案同步：
-   - 连通成功但契约不通过时，显示“连通正常 + 契约提示”，不再判定为整体失败。
-3. 测试补齐：
-   - 新增“连通成功但契约无效仍应 ok=true”用例并通过。
-
-**本地实测（当前配置）**：
-
-- 上游返回 HTTP 200；模型 `Qwen/Qwen3-14B` 响应 `choices=null`。
-- 在新口径下结果为：`ok=true`、`connectivity_ok=true`、`contract_ok=false`，满足“连通性测试通过”的目标。
-
-#### 0g. 重启后 E2E 复测与问题定位（本次会话补记）
-
-**时间**：2026-04-11
-
-**执行背景**：按用户要求“重启服务后重新做验证码提取端到端验证”，并定位“AI 测试提示缺少 choices 字段”的根因。
-
-**本次实际操作**：
-
-1. 服务重启与健康检查：
-   - 清理旧 `python web_outlook_app.py/start.py` 进程
-   - 重新启动 `python web_outlook_app.py`
-   - `/healthz` 返回正常（重启成功）
-
-2. 配置探测（已保存配置）：
-   - `POST /api/settings/verification-ai-test`（携带 CSRF）
-   - 结果：
-     - `ok=true`
-     - `connectivity_ok=true`
-     - `contract_ok=false`
-     - `probe_error=invalid_response_format`
-     - `probe_message=AI 响应缺少 choices 字段`
-   - 说明：连通性达标，但模型返回结构不满足当前契约解析要求。
-
-3. 验证码提取 E2E 抽样（前 8 账号）：
-   - 7 个账号：`HTTP 200 + success=true`
-   - 1 个账号（`[REDACTED]`）：超时/连接失败
-   - 多数返回 `confidence=low`，`ai_used=null`
-
-4. 失败账号复测与定位：
-   - 关闭环境代理后复测同账号，返回：`IMAP_CONNECT_FAILED`（WinError 10060）
-   - 结论：该账号问题属于 IMAP 网络连通性，不是验证码提取逻辑回归。
-
-**问题定位结论**：
-
-1. “AI 探测报 choices 问题”来源于上游模型响应格式（`choices=null`），不是本地请求未发出。
-2. “E2E 中 ai_used 为空”与上面一致：AI fallback 被触发后未通过契约校验，按设计快速回退规则结果。
-3. E2E 主链路整体可用；单账号失败由 IMAP 连通性导致。
-
-#### 0h. OpenAI 兼容格式探测脚本与实测结论（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求确认“OpenAI 兼容格式是否可指定返回格式”，并定位当前模型为何返回 `choices` 问题。
-
-**本次新增脚本**：
-
-1. `tests/verify_verification_ai_endpoints.py`
-   - 串行调用：`/api/settings`、`/api/csrf-token`、`/api/settings/verification-ai-test`、`/api/accounts`、`/api/emails/<email>/extract-verification`
-   - 用于手工联调时完整观察返回体。
-2. `tests/verify_openai_compatible_response_format.py`
-   - 对同一 OpenAI 兼容端点分别测试：
-     - `response_format={"type":"json_object"}`
-     - `response_format={"type":"json_schema", ...}`
-     - 不带 `response_format`
-     - `tools + tool_choice`
-
-**实测结论**：
-
-1. `Qwen/Qwen3-14B`（当前配置）在四种请求下均返回 `HTTP 200`，但 `choices=null`。
-   - 说明并非本地请求体字段问题（`response_format/tools` 均未改变该行为）。
-2. `deepseek-ai/DeepSeek-V3.2` 在同端点可返回标准 `choices` 列表。
-   - 且对 `json_schema`/`tools` 请求均有结构化响应。
-3. 因此当前“缺少 choices”根因更偏向**模型/供应商实现差异**，不是我方是否设置 `response_format`。
-
-#### 0i. 临时切换 DeepSeek 复测（本次会话补记）
-
-**时间**：2026-04-11
-
-**操作**：按用户要求临时将 `verification_ai_model` 切换为 `deepseek-ai/DeepSeek-V3.2` 后复测，再恢复原模型。
-
-**结果**：
-
-1. 设置切换成功（`PUT /api/settings` 返回 200）。
-2. `verification-ai-test` 结果：
-   - `ok=true`
-   - `connectivity_ok=true`
-   - `contract_ok=false`
-   - `probe_error=invalid_ai_output`
-   - `response_preview` 显示 `confidence: 1.0`（数字）
-3. E2E（`extract-verification`）抽样结果仍以规则结果为主，`ai_used` 仍为空。
-4. 已将模型恢复为原值：`Qwen/Qwen3-14B`。
-
-**结论**：
-
-- DeepSeek 模型可返回 `choices`，但当前固定契约下（`confidence` 必须为 `high/low` 字符串）仍不通过，导致 AI 回退不生效。
-
-#### 0j. AI 解析口径放宽（只要有 code/link 就接受）（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户确认“最终只要返回验证码或验证链接即可，不需要严格卡 confidence/schema”。
-
-**本次代码调整**：
-
-1. 文件：`outlook_web/services/verification_extractor.py`
-2. 调整 `_parse_verification_ai_content(...)` 解析策略：
-   - 不再强制 `schema_version` 必须匹配
-   - 不再强制 `verification_code/verification_link/confidence/reason` 的严格类型
-   - 只要 `verification_code` 或 `verification_link` 任一可解析非空，即接受
-   - `confidence` 支持数值/布尔/字符串，统一归一到 `high/low`
-   - `reason` 非字符串时做兜底字符串化
-
-**验证结果**：
-
-1. 单元测试：
-   - `tests.test_settings_verification_ai_probe`
-   - `tests.test_verification_ai_json_contract`
-   - 结果：通过
-2. 重启服务后复测：
-   - 临时切 `deepseek-ai/DeepSeek-V3.2` 时，`verification-ai-test` 结果变为：
-     - `ok=true`
-     - `connectivity_ok=true`
-     - `contract_ok=true`
-     - `parsed_output` 正常返回 code/link/confidence
-
-**备注**：
-
-- 对 `Qwen/Qwen3-14B`，若上游仍返回 `choices=null`，该问题依旧存在（无可解析内容）。
-
-#### 0k. Qwen 模型列表筛选与端到端实测（本次会话补记）
-
-**时间**：2026-04-11
-
-**背景**：用户要求优先用千问模型并完成一次真实端到端验证。
-
-**本次操作**：
-
-1. 拉取模型列表并筛选 Qwen 候选（`/v1/models`）。
-2. 对多个 Qwen 模型执行 `POST /api/settings/verification-ai-test` 探测。
-3. 选定可通过契约的模型后执行端到端提取验证。
-
-**探测结论**：
-
-1. `Qwen/Qwen3-8B`、`Qwen/Qwen3-32B`、`Qwen/Qwen3-30B-A3B`：
-   - 连通可达，但仍出现 `invalid_response_format`（choices 不可用）。
-2. `Qwen/Qwen3-235B-A22B-Instruct-2507`、`Qwen/Qwen3-Coder-30B-A3B-Instruct`：
-   - `connectivity_ok=true` 且 `contract_ok=true`。
-
-**端到端实测（最终）**：
-
-1. 将默认模型设置为：`Qwen/Qwen3-235B-A22B-Instruct-2507`。
-2. `verification-ai-test` 返回成功，含 `parsed_output`。
-3. 对 Outlook 账号抽样调用 `extract-verification`：
-   - 全部 `HTTP 200 + success=true`
-   - 其中至少 1 条结果出现 `ai_used=true`，证明 AI fallback 实际生效。
-
-#### 0l. 按用户要求继续切换 Qwen 并复验（本次会话补记）
-
-**时间**：2026-04-11
-
-**本次动作**：
-
-1. 再次拉取模型列表并批量探测多个 Qwen 候选：
-   - `Qwen/Qwen3-14B`
-   - `Qwen/Qwen3-8B`
-   - `Qwen/Qwen3-32B`
-   - `Qwen/Qwen3-30B-A3B`
-   - `Qwen/Qwen3-235B-A22B`
-   - `Qwen/Qwen3-235B-A22B-Instruct-2507`
-   - `Qwen/Qwen3-Coder-30B-A3B-Instruct`
-   - `Qwen/QVQ-72B-Preview`
-
-2. 探测结论（verification-ai-test）：
-   - 稳定可用：
-     - `Qwen/Qwen3-235B-A22B-Instruct-2507`
-     - `Qwen/Qwen3-Coder-30B-A3B-Instruct`
-   - 不稳定（`choices` 不可用）：
-     - `Qwen/Qwen3-14B`
-     - `Qwen/Qwen3-8B`
-     - `Qwen/Qwen3-32B`
-     - `Qwen/Qwen3-30B-A3B`
-   - 超时：
-     - `Qwen/Qwen3-235B-A22B`
-     - `Qwen/QVQ-72B-Preview`
-
-3. 最终保留默认模型为：`Qwen/Qwen3-235B-A22B-Instruct-2507`，并再次执行 E2E 脚本确认：
-   - `verification-ai-test`：`contract_ok=true`
-   - `extract-verification`：`HTTP 200 + success=true`（链路稳定）
-
-#### 0m. TODO 文档按实际实现回修 + 全量测试 + 服务就绪（本次会话补记）
-
-**时间**：2026-04-11
-
-**本次操作**：
-
-1. 按当前真实实现回修：
-   - `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-   - 重点：
-     - 将旧的分组级 AI 任务标注为“迁移到系统级 settings”
-     - 补充 Phase 10（AI 探测与模型联调）
-     - 补充 Phase 11（解析放宽与 E2E 复验）
-     - 明确 `GROUP_AI_MODEL_REQUIRED` 不再是运行期主错误码
-2. 按用户要求准备验证：
-   - 执行全量测试（见本会话后续执行结果）
-   - 确认服务保持可用，便于继续人工测试。
+## 2026-04-13
 
 ### 操作记录
 
-#### 0. AI 配置系统级化 + 固定 JSON 契约（本轮代码落地）
+#### 28. OAuth Token 工具 UI 简化 + 获取授权链接 + i18n 翻译
 
-**时间**：2026-04-10
-
-**本次实际代码改动（已完成）**：
-
-1. **settings 后端闭环**
-   - 文件：`outlook_web/controllers/settings.py`
-   - `GET /api/settings` 增加：
-     - `verification_ai_enabled`
-     - `verification_ai_base_url`
-     - `verification_ai_model`
-     - `verification_ai_api_key_set`
-     - `verification_ai_api_key_masked`
-   - `PUT /api/settings` 增加系统级 AI 保存逻辑：
-     - `verification_ai_enabled/base_url/api_key/model`
-     - API Key 加密存储、脱敏占位回写保护
-     - 启用 AI 时完整性校验（缺项即返回 `VERIFICATION_AI_CONFIG_INCOMPLETE`）
-
-2. **settings 前端闭环（Basic Tab）**
-   - 文件：`templates/index.html`, `static/js/main.js`
-   - 在“基础”Tab 新增“验证码 AI 增强”区：
-     - 开关、Base URL、API Key、模型 ID
-   - `loadSettings/saveSettings` 同步新增字段读取与提交
-   - 前端保存前本地校验：AI 开启时要求 URL / Key / Model 完整
-
-3. **group AI 去运行期化（软兼容）**
-   - 文件：`templates/partials/modals.html`, `static/js/features/groups.js`, `outlook_web/controllers/groups.py`, `outlook_web/repositories/groups.py`
-   - 分组弹窗移除 AI 字段（仅保留 length / regex）
-   - group API 对历史 `verification_ai_*` payload 软兼容：接收但忽略
-   - 运行期策略解析不再从 group 读取 AI 配置
-
-4. **提取链路接入 AI fallback（规则优先）**
-   - 文件：`outlook_web/services/verification_extractor.py`
-   - 新增能力：
-     - 系统级 AI 配置读取与完整性判断
-     - 固定 JSON 输入契约构造（`verification_ai_v1`）
-     - AI 输出 JSON 结构/类型校验
-     - 规则低置信度时 AI fallback，AI 失败快速回退
-   - Web / External / Temp Mail 已接入：
-     - `outlook_web/controllers/emails.py`
-     - `outlook_web/services/external_api.py`
-     - `outlook_web/services/temp_mail_service.py`
-
-5. **错误码与默认配置**
-   - 文件：`outlook_web/errors.py`, `outlook_web/db.py`
-   - 新增错误码：`VERIFICATION_AI_CONFIG_INCOMPLETE`
-   - DB 初始化补充 4 个 settings key：
-     - `verification_ai_enabled`
-     - `verification_ai_base_url`
-     - `verification_ai_api_key`
-     - `verification_ai_model`
-
-6. **测试新增/更新**
-   - 新增：
-     - `tests/test_settings_verification_ai_config.py`
-     - `tests/test_verification_ai_json_contract.py`
-   - 更新：
-     - `tests/test_group_policy_frontend_contract.py`
-     - `tests/test_groups_verification_policy_api.py`
-     - `tests/test_extract_verification_group_policy.py`
-     - `tests/test_external_verification_group_policy.py`
-
-7. **本轮回归结果（已执行）**
-   - `python -m unittest tests.test_settings_verification_ai_config tests.test_verification_ai_json_contract tests.test_group_policy_frontend_contract tests.test_groups_verification_policy_api tests.test_extract_verification_group_policy tests.test_external_verification_group_policy -v` → **22 passed**
-   - `python -m unittest tests.test_verification_extractor_options tests.test_settings_external_api_key -v` → **47 passed**
-   - `python -m unittest tests.test_external_api -v` → **111 passed**
-   - `python -m unittest tests.test_settings_tab_refactor_frontend tests.test_settings_tab_refactor_backend -v` → **26 passed**
-   - `python -m py_compile ...`（本轮改动核心 Python 文件）→ **通过**
-
-8. **全量回归（discover）**
-   - `python -m unittest discover -s tests -v`（延长超时后完整执行）
-   - 结果：`Ran 946 tests in 191.540s`，`OK (skipped=7)`
-
-**说明**：本轮已完成从专项回归到全量 discover 的闭环验证。
-
-#### 0a. 全量复跑 + 文档实况回填（本次会话补记）
-
-**时间**：2026-04-10
-
-**本次实际操作**：
-
-1. 按会话决策再次执行全量回归：
-   - `python -m unittest discover -s tests -v`
-   - 结果：`Ran 946 tests in 206.872s`，`OK (skipped=7)`
-
-2. 按“根据实际修改文档”完成专项文档回填与纠偏：
-   - `docs/BUG/2026-04-10-验证码策略-分组AI配置口径错误与长度校验易用性BUG.md`
-     - 状态由“待修复”改为“已修复”，补充修复落地文件与验证结果。
-   - `docs/FD/2026-04-10-AI识别配置系统级化与固定JSON契约FD.md`
-     - confidence 口径改为 `high/low`，补充实施状态回填。
-   - `docs/TD/2026-04-10-AI识别配置系统级化与固定JSON契约TD.md`
-     - confidence 枚举改为 `high/low`，补充实施状态与全量测试结果。
-   - `docs/TDD/2026-04-10-AI识别配置系统级化与固定JSON契约TDD.md`
-     - 补充执行结果回填（含全量回归结论）。
-   - `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-     - Phase 9 从“待实施”更新为“已完成”，勾选 9.2/9.3/9.4/9.6 任务。
-
-**状态结论**：
-
-- 会话相关文档已与代码与测试现状对齐。
-- WORKSPACE 已完成本次操作留痕。
-
-#### 0b. 人工联调前运行态校验（本次会话补记）
-
-**时间**：2026-04-10
-
-**背景问题**：人工反馈“前端看起来与修复前一致”。
-
-**本次排查与操作**：
-
-1. 识别到本地启动受环境影响：
-   - `SECRET_KEY` 缺失会导致应用无法按当前工作区实例稳定启动。
-   - 全局代理环境变量（`HTTP_PROXY/HTTPS_PROXY`）会干扰本地 127.0.0.1 请求验证。
-2. 停止旧进程并以当前工作区重启服务，明确注入测试环境变量：
-   - `SECRET_KEY=dev-secret-key-for-manual-test`
-   - `LOGIN_PASSWORD=admin123`
-3. 运行态验证（登录后真实页面与接口）：
-   - 首页包含系统级 AI 设置标识：`settingsVerificationAiEnabled`、文案“验证码 AI 增强”。
-   - 分组弹窗保留 `groupVerificationCodeLength/groupVerificationCodeRegex`，无 `groupVerificationAi*` 控件。
-   - settings API：AI 开启缺项返回 `VERIFICATION_AI_CONFIG_INCOMPLETE`；完整保存后 API Key 脱敏回显。
-   - groups API：历史 `verification_ai_*` 入参被忽略，长度 `6 位` 规范化为 `6-6`。
-
-**结论**：本轮修复在运行态可复核，前端与后端行为与专项目标一致。
-
-#### 0c. 人工反馈问题排查：解密失败与自动调度未启动（本次会话补记）
-
-**时间**：2026-04-11
-
-**用户反馈**：
-
-1. AI 服务已配置，但提取链路“看起来没走新逻辑”。
-2. 出现“获取邮件信息失败”，怀疑数据库加密/解密密钥错误。
-3. 观察到自动调度似乎未启动。
-
-**本次排查动作（代码+运行态）**：
-
-1. 核查密钥与加解密机制：
-   - `outlook_web/security/crypto.py` 基于 `SECRET_KEY` 派生 Fernet 密钥，`SECRET_KEY` 变更会导致历史 `enc:` 数据解密失败（预期行为）。
-2. 核查启动方式差异：
-   - `start.py` 会自动 `load_dotenv()`；
-   - `web_outlook_app.py` 原先未显式加载 `.env`，在部分本地启动方式下可能拿不到一致环境变量。
-3. 代码修复：
-   - 更新 `web_outlook_app.py`：增加 `.env` 自动加载（`python-dotenv`），并保持无该依赖时的兼容降级。
-4. 运行态复验：
-   - 使用 `python web_outlook_app.py`（不手工注入 SECRET_KEY）可正常启动：`/healthz` 200。
-   - 登录后获取账号列表正常（24 个账号）。
-   - 邮件列表接口可正常返回（首账号 `EMAIL_FETCH_SUCCESS=True`）。
-   - `/api/scheduler/status` 显示 `enabled=true`、`autostart=true`。
-   - 连续两次采样（间隔 70s）确认 `scheduler_heartbeat` 时间与 PID 已更新，说明自动调度正常运行。
-
-**文档同步**：
-
-1. `CHANGELOG.md`：补充“web_outlook_app 直启自动加载 .env”的 why。
-2. `docs/BUG/2026-04-10-...BUG.md`：补充运行态误配场景与补丁说明。
-
-**当前结论**：
-
-- 本次“获取邮件失败/疑似解密失败”主要由启动环境不一致触发，非 AI 迁移逻辑本身回退。
-- 自动调度经运行态验证已正常启动并持续心跳。
-
-#### 0d. 人工测试反馈回填 + 指南落地（本次会话补记）
-
-**时间**：2026-04-11
-
-**用户反馈结论（人工）**：
-
-1. “完整 AI 配置保存”可用。
-2. “分组字段范围 + 长度容错”可用并能规范化保存。
-3. “Web 验证码提取”可用。
-4. “AI 异常快速回退”与 “External 人工联调”不易现场复现，需由自动化补强。
-
-**本次补强动作**：
-
-1. 新增人工测试指南文档：
-   - `docs/DEV/2026-04-11-AI系统级配置与提取链路人工测试指南.md`
-   - 覆盖：启动前置、系统级 AI 配置、分组容错、提取链路、调度状态、常见故障排查。
-2. 自动化补测执行：
-   - `python -m unittest tests.test_settings_verification_ai_config tests.test_verification_ai_json_contract tests.test_external_verification_group_policy -v`
-   - 结果：`Ran 8 tests ... OK`
-3. 文档回填：
-   - `docs/TDD/2026-04-10-AI识别配置系统级化与固定JSON契约TDD.md`
-   - `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-
-**状态**：
-
-- 人工可测部分已确认通过。
-- 不便人工构造部分已由自动化用例补齐并通过。
-
-#### 1. 验证码提取提速 + AI 增强（V1）需求澄清与 PRD 建档
-
-**时间**：2026-04-10
-
-**背景**：围绕“点击验证码按钮耗时较长、默认长度策略与业务不匹配、希望引入轻量 AI 提升通用性”进行会话澄清。
-
-**本次确认的需求决策（以会话结论为准）**：
-
-1. V1 采用双 P0 范围：
-   - P0-A：验证码提取链路提速
-   - P0-B：AI 提取能力（验证码/认证链接）
-2. 默认验证码策略改为 **6 位**（`6-6`）
-3. 增加“**按账号分组（group）配置映射范围**”能力
-4. 参数优先级：请求显式参数 > 分组配置 > 系统默认（6-6）
-
-**本次实际操作**：
-
-- 新增 PRD 文档：
-  - `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-- 文档内容覆盖：
-  - 现状问题拆解（慢链路定位）
-  - V1 双 P0 目标与范围
-  - 分组映射与默认 6 位策略
-  - AI 兜底触发条件、输出门控、时延与成本约束
-  - 验收指标（P50/P95）与风险应对
-
-**说明**：本次为需求与文档阶段，未改动业务代码。
-
-#### 1b. PRD 澄清补充：分组设置项范围确认
-
-**时间**：2026-04-10
-
-**会话确认结果**：
-
-1. 配置入口：放在每个分组的设置界面
-2. V1 分组配置项：
-   - 验证码范围（code_length）
-   - AI 开关
-   - AI 模型选择
-
-**文档同步**：
-
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - 新增分组配置入口说明
-  - 新增 V1 分组配置项章节
-  - 补充“AI 开关开启才触发 AI 兜底”的约束
-
-#### 1c. PRD 澄清补充：模型配置口径
-
-**时间**：2026-04-10
-
-**会话确认结果**：
-
-1. 分组模型配置采用“自由填写模型 ID”
-2. V1 仅考虑 OpenAI 兼容格式
-3. 配置侧保持简单，不引入多供应商复杂配置
-
-**文档同步**：
-
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - In Scope 新增“仅支持 OpenAI 兼容模型配置”
-  - 分组配置项改为“AI 模型 ID（自由填写）”
-  - 新增 V1 配置简化原则章节
-
-#### 1d. PRD 澄清补充：模型ID缺省处理
-
-**时间**：2026-04-10
-
-**会话确认结果**：
-
-1. 当分组 AI 开关开启但模型 ID 为空时，直接报错
-2. 错误需明确提示“请填写模型 ID”
-3. 不自动回退默认模型
-
-**文档同步**：
-
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - 新增“模型 ID 缺省处理”章节
-  - 配置简化原则补充“AI 开启时模型 ID 必填”
-
-#### 1e. PRD 澄清补充：提速范围优先级
-
-**时间**：2026-04-10
-
-**会话确认结果**：
-
-1. 提速范围中，Web 与 External 两条链路作为同级 P0
-2. 不做先后优先，V1 同步纳入验收
-
-**文档同步**：
-
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - 目标层补充 External 耗时波动治理
-  - In Scope 调整为“Web + External 同级 P0”
-  - 提速需求新增“双入口同级 P0”定义
-  - 性能验收补充 External P50/P95 指标
-
-#### 1f. PRD 结构重构：仅保留需求与 Use Case
-
-**时间**：2026-04-10
-
-**触发原因**：会话中明确要求 PRD 仅讨论“需求 + Use Case”，不展开实现口径。
+**时间**：2026-04-13
 
 **本次操作**：
 
-1. 删除原 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`（偏实现化版本）
-2. 重新创建同名 PRD（v2.0），结构聚焦：
-   - 背景
-   - 目标
-   - 需求范围（In/Out）
-   - 核心需求定义
-   - 用户角色
-   - Use Cases（UC-01 ~ UC-05）
-   - 需求层验收标准
-   - 风险与边界
+1. UI 简化
+   - 删除整个「Azure 配置指引」折叠卡片（含 4 步配置说明 + 故障排查长文）
+   - 删除 Client Secret 输入框（之前已 disabled）
+   - 删除 Tenant 下拉框（之前固定 `consumers`）
+   - 标题从「兼容账号 Token 导入工具」→「OAuth Token 工具」
+   - 副标题改为简洁说明
+   - CSS 清理不再使用的样式
+
+2. 获取授权链接功能（替代自动弹窗）
+   - 按钮从「登录 Microsoft」→「获取授权链接」
+   - 新增 ② 授权链接展示区：readonly input + 「复制链接」「打开链接」按钮
+   - `startOAuth()` 不再自动 `window.open()` 弹窗，改为展示链接供用户复制
+   - 步骤编号更新：② 授权链接 → ③ 换取 Token → ④ 结果
+
+3. i18n 翻译支持
+   - `token_tool.html` 引入 `i18n.js`
+   - `i18n.js` exactMap 新增约 50 条 token tool 中英翻译
+   - `token_tool.js` 所有动态中文提示用 `t()` / `translateAppText()` 包装
+   - 用户切换中/英后，页面静态文本自动翻译，动态提示也跟随
+
+**修改文件**：
+- `templates/token_tool.html`
+- `static/js/features/token_tool.js`
+- `static/css/token_tool.css`
+- `static/js/i18n.js`
+- `tests/test_oauth_tool.py`
+
+**测试结果**：
+- `python -m pytest tests/test_oauth_tool.py -v` → 71 passed
+- `python -m pytest tests/ -q` → 1001 passed, 10 skipped, 2 warnings
+
+**本地服务**：
+- PID 11436，`http://127.0.0.1:5000/login` HTTP 200
+
+---
+
+## 2026-04-12
+
+### 操作记录
+
+#### 27. 输出“微软云配置自动化提示词”文件，供其他 AI 直接执行云端配置
+
+**时间**：2026-04-12
+
+**本次操作**：
+- 在项目目录新增：
+  - `docs\\微软云配置自动化提示词.md`
+
+**文件用途**：
+- 让其他 AI 只处理微软云端配置
+- 自动完成：
+  - audience
+  - public client
+  - redirect URI
+  - API permissions
+- 明确声明：
+  - personal account 的最终登录 / consent / refresh_token 获取仍需人工交互
+
+**联动更新**：
+- 已在 `docs\\OAuth-Token工具兼容导入踩坑总结.md` 中补上对这份提示词文件的引用
+- 已同步更新会话 `plan.md` 与 `WORKSPACE.md`
+
+#### 26. 评估“微软 CLI / API + AI 自动完成配置”的可行边界
+
+**时间**：2026-04-12
+
+**调研结论**：
+- 可以自动化的部分：
+  - App Registration 创建 / 更新
+  - `signInAudience`
+  - public redirect / public client 开关
+  - API permissions 增删
+  - 组织租户下的 admin consent（如适用）
+- 不能完全自动化的部分：
+  - personal Microsoft account 的首次交互式登录
+  - delegated 权限的首次 consent
+  - 最终 refresh_token 的实际颁发
+
+**更现实的方案**：
+- AI 负责 Azure 配置与差异检查
+- 用户只做一次浏览器登录授权
+- AI 再接管本地 token 校验、写入账号、错误诊断
+
+**本次同步动作**：
+- 已将这部分内容补入 `docs\\OAuth-Token工具兼容导入踩坑总结.md`
+- 已同步更新会话 `plan.md` 与 `WORKSPACE.md`
+
+#### 25. 输出会话专用踩坑总结文件，供后续写教程使用
+
+**时间**：2026-04-12
+
+**本次操作**：
+- 按用户要求，最终将专用总结文件写入项目目录而非用户目录：
+  - `E:\\hushaokang\\Data-code\\EnsoAi\\outlookEmail\\Buggithubissue\\docs\\OAuth-Token工具兼容导入踩坑总结.md`
+
+**文件内容**：
+- 最终跑通时的微软侧配置
+- 当前项目兼容导入模式的真实约束
+- 本次所有关键错误码与根因映射
+- 已在项目中完成的收口
+- 最终验证结果
+- 后续写教程时建议强调的顺序
+
+#### 24. 权限放开后，邮件拉取已成功；日志确认此前是“受众 + Scope + API permissions”三重叠加
+
+**时间**：2026-04-12
+
+**本次结果**：
+- 用户确认已经在微软侧放开邮箱权限，并成功拉取邮件
+- 日志显示：
+  - `/api/token-tool/exchange` → `200`
+  - `/api/token-tool/save` → `200`
+  - `/api/emails/zerodotsix@outlook.com?...` → `200`
+
+**从失败到成功的完整结论**：
+- Graph 侧曾出现 `AADSTS9002331`：说明 Supported account types 不能收窄到 `PersonalMicrosoftAccount`
+- IMAP 侧曾出现 `AADSTS70000`：说明旧 Graph 默认 Scope 残留或 IMAP 权限未放开
+- Graph 侧还出现过 `ErrorAccessDenied`：说明邮箱读取权限本身也未完全放开
+
+**最终踩坑总结**：
+- 受众要用 `AzureADandPersonalMicrosoftAccount`
+- 平台要走 Public Client / Mobile and desktop applications
+- Scope 要切到 IMAP 预设并重新授权
+- Azure API permissions 至少要补：
+  - `Office 365 Exchange Online → IMAP.AccessAsUser.All`
+- 如果还希望 Graph 链路也可用，再补：
+  - `Microsoft Graph → Mail.Read`
+
+**附带发现**：
+- 日志里仍有一个独立问题：`/api/emails/.../extract-verification` 触发了 `AttributeError: 'str' object has no attribute 'get'`
+- 这个 500 不影响本次邮件列表拉取成功，但属于后续可单独修复的旁路问题
+
+#### 23. 按最新运行时诊断再次重启本地服务
+
+**时间**：2026-04-12
+
+**原因**：
+- 在读取运行日志、修正保存失败引导与旧 Scope 兼容映射后，原服务进程仍停留在旧代码
+
+**本次操作**：
+- 停止了当前占用 5000 端口的旧进程
+- 重新启动本地服务，新 PID `44800`
+- 验证：`http://127.0.0.1:5000/login` 返回 `HTTP 200`
+
+#### 22. 运行日志确认当前保存的 Scope 仍是旧 Graph 默认值
+
+**时间**：2026-04-12
+
+**日志与配置结论**：
+- 运行日志显示：
+  - Graph：`AADSTS9002331`（受众过窄，仍与 `/common` 冲突）
+  - IMAP：`AADSTS70000`（scope 未授权 / 过期）
+- 进一步读取当前工具配置后确认：
+  - `oauth_tool_scope = offline_access https://graph.microsoft.com/.default`
+
+**确认结论**：
+- 当前 IMAP 失败不是“refresh_token 本身坏了”
+- 更直接的原因是：用户这次授权仍在沿用旧的 Graph 默认 Scope，没有切回 IMAP 兼容预设
+- 因此兼容导入模式下，需要：
+  - 将受众切到 `AzureADandPersonalMicrosoftAccount`
+  - 将 Scope 切回 IMAP 预设
+  - 重新授权后再写入账号
+
+**本次同步动作**：
+- `get_config()` 现在会把历史遗留的 Graph 默认 Scope 自动映射回 IMAP 默认值，降低旧配置残留导致的重复踩坑概率
+- 新增自动化用例覆盖这条“旧 Graph 默认 Scope → IMAP 默认值”的兼容映射
+- 更新页面说明、README、会话 plan 和 `WORKSPACE.md`
+
+**针对性回归**：
+- `python -m pytest tests/test_oauth_tool.py -v -k "legacy_graph_scope or common_endpoint_guidance"` → `2 passed`
+
+#### 21. `AADSTS9002331` 证明受众不能收窄到 PersonalMicrosoftAccount
+
+**时间**：2026-04-12
+
+**实际现象**：
+- 授权已成功，用户进入“写入账号”弹窗
+- 保存前 token 验证失败，错误为：
+  - `AADSTS9002331`
+  - `Application ... is configured for use by Microsoft Account users only. Please use the /consumers endpoint to serve this request.`
+
+**确认结论**：
+- 这说明兼容导入模式不能把应用受众收窄到 **PersonalMicrosoftAccount**
+- 因为系统当前写入前验证与部分运行链路仍依赖 `/common`
+- 因此与现有模型兼容的正确受众，应是：
+  - **Accounts in any identity provider or organizational directory and personal Microsoft accounts**
+  - 即 `AzureADandPersonalMicrosoftAccount`
+
+**本次同步动作**：
+- 更新 `save_to_account()` 的失败引导：遇到 `AADSTS9002331` 时，明确提示把 Supported account types 改为 `AzureADandPersonalMicrosoftAccount`
+- 新增自动化用例覆盖该引导分支
+- 更新页面说明、README、会话 plan 和 `WORKSPACE.md`，撤回此前“PersonalMicrosoftAccount 也可作为推荐选项”的过宽口径
+
+**针对性回归**：
+- `python -m pytest tests/test_oauth_tool.py -v -k "common_endpoint_guidance or invalid_client or unauthorized_client"` → `3 passed`
+
+#### 20. 用户最新 manifest 已修正一半，剩余卡点集中在 Web 回调平台
+
+**时间**：2026-04-12
+
+**用户反馈的最新 manifest**：
+- `allowPublicClient = true` ✅
+- `signInAudience = "PersonalMicrosoftAccount"` ✅
+- `accessTokenAcceptedVersion = 2` ✅
+- 但 `replyUrlsWithType` 仍然只有：
+  - `http://localhost:5000/token-tool/callback`（`type = "Web"`）
+
+**字段级结论**：
+- 这说明 audience / public-client 开关已经改对了一半
+- 当前仍然不符合兼容导入模式的关键点，是**回调平台仍停留在 Web**
+- 在这种情况下，Azure 继续把当前链路视为机密 Web 客户端、继续要求 `client_secret` 是符合现象的
+
+**下一步建议**：
+- 不再继续围绕 Web 回调调整
+- 改用 **Mobile and desktop applications** 的 public redirect
+- 若 Azure 门户允许，优先直接登记 `http://localhost:5000/token-tool/callback` 这类本地 callback URI；`http://localhost` 作为后备 public redirect
+- 在工具里把 Redirect URI 改成相同值，并使用**手动粘贴回调 URL**完成 exchange
+
+#### 19. `invalid_client` + “必须提供 client_secret” 反映的是平台类型错位
+
+**时间**：2026-04-12
+
+**实际现象**：
+- 用户重新测试后收到：
+  - `invalid_client`
+  - `AADSTS70002: The provided request must include a 'client_secret' input parameter`
+
+**当前判断**：
+- 这不应再解读成“Client ID 无效或应用被删除”
+- 更符合当前上下文的解释是：Azure 仍把当前 redirect/platform 视为**机密 Web 客户端**
+- 也就是说，即使 audience、public client 开关已经调整过，只要还在走 Web 平台回调，Azure 仍可能继续要求 `client_secret`
+
+**本次同步动作**：
+- 更新 `oauth_tool.py` 的 `invalid_client` 引导文案，改成 public client / redirect 平台错位说明
+- 更新 `templates/token_tool.html` 与 README：若仍被要求 `client_secret`，改用 **Mobile and desktop applications** 平台的 public redirect（如 `http://localhost`），并在工具里走手动粘贴回调 URL
+- 将该结论写入会话 plan 与 `WORKSPACE.md`，作为后续人工测试的主诊断方向
+
+**针对性回归**：
+- `python -m pytest tests/test_oauth_tool.py -v -k "invalid_client or unauthorized_client"` → `2 passed`
+
+#### 18. `ms-sso.copilot.microsoft.com/processcookie` 跳转属于浏览器侧干扰
+
+**时间**：2026-04-12
+
+**实际现象**：
+- 用户登录 Microsoft 账号后，没有直接回到 Azure / 本地回调
+- 浏览器跳到：
+  - `ms-sso.copilot.microsoft.com/processcookie?...`
+- 页面报错：
+  - `ERR_CONNECTION_CLOSED`
+
+**当前判断**：
+- 这个域名不在我们应用的 OAuth 回调链路中
+- 它更像是浏览器 / Copilot / Microsoft SSO 的 cookie 处理辅助跳转
+- 因此这一步优先按**浏览器环境问题**处理，而不是继续修改本地代码或 Azure App Registration
 
-**说明**：本次仍为文档层操作，未改动业务代码。
+**建议排查方向**：
+- 使用无插件的隐身窗口 / Guest Profile / 另一浏览器重试
+- 清理 `live.com`、`microsoftonline.com`、`copilot.microsoft.com` 相关 cookie
+- 暂时关闭代理、VPN、杀软 HTTPS 检查、浏览器扩展后再试
+- 若在新浏览器或新网络下恢复正常，可基本确认是本机浏览器环境干扰
+
+#### 17. 基于用户提供的 Azure manifest 样本做字段级诊断
 
-#### 1g. PRD 澄清补充：默认 6 位的作用边界
+**时间**：2026-04-12
 
-**时间**：2026-04-10
+**用户提供的 manifest 关键信息**：
+- `signInAudience = "PersonalMicrosoftAccount"` → 这一项已经对了
+- `accessTokenAcceptedVersion = 2` → token 版本前置约束已经满足
+- `allowPublicClient = null` → 兼容导入模式下应显式开启为 public client
+- `replyUrlsWithType` 当前只有 `http://localhost:5000/token-tool/callback`
 
-**会话确认结果**：
+**字段级结论**：
+- 需要重点改的是 **`allowPublicClient`**：应设为启用（Portal 中对应 `Allow public client flows = Yes`）
+- Redirect URI 最好同时注册：
+  - `http://127.0.0.1:5000/token-tool/callback`
+  - `http://localhost:5000/token-tool/callback`
+- `passwordCredentials` 可以保留，但当前兼容导入模式不会使用它
+- IMAP 兼容链路建议通过 Portal 的 **API permissions** 补充 Exchange Online 的委托权限，而不是直接手改 manifest GUID
 
-1. 默认 6 位仅作用于“验证码提取”
-2. 链接提取不受默认 6 位策略影响
+**本次同步动作**：
+- 更新页面配置指引，明确本地建议同时注册 `127.0.0.1` 与 `localhost` 两个 Redirect URI
+- 将 manifest 样本分析结果写入会话 plan 与 WORKSPACE，便于后续继续排查
 
-**文档同步**：
+#### 16. Azure 门户切换 consumers 时的 manifest 前置约束补充
 
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - 背景、In Scope、策略需求、验收标准均改为同一口径
-  - 明确“仅验证码默认 6 位，链接提取不受影响”
+**时间**：2026-04-12
 
-#### 1h. PRD 澄清补充：分组验证码配置表达能力
+**实际现象**：
+- 用户在把应用切换为支持个人 Microsoft 账号时，Azure 门户报错：
+  - `Property api.requestedAccessTokenVersion is invalid`
 
-**时间**：2026-04-10
+**确认结论**：
+- 这是 Azure App Registration 的 manifest 约束，不是本地代码问题
+- 当应用要支持个人 Microsoft 账号（`PersonalMicrosoftAccount` / `AzureADandPersonalMicrosoftAccount`）时，`api.requestedAccessTokenVersion` 必须为 `2`
+- 正确处理顺序是：先到 **Manifest** 把 `api.requestedAccessTokenVersion` 改成 `2`，保存后再去切换 Supported account types
 
-**会话确认结果**：
+**本次同步动作**：
+- 更新页面内 Azure 配置提示，补上 `requestedAccessTokenVersion=2` 的前置说明
+- 更新 README / OAuth Tool 相关 PRD / FD / TD / TDD / TODO / 会话 plan，保证文档与当前实际限制一致
 
-1. 分组配置中的验证码策略支持：
-   - 长度范围
-   - 自定义正则
+#### 15. 根据实际 `unauthorized_client` 结果补齐微软侧配置口径
 
-**文档同步**：
+**时间**：2026-04-12
 
-- 更新 `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-  - In Scope 配置项补充“自定义正则”
-  - 核心需求补充“长度范围 + 自定义正则”
-  - 验收标准同步为“范围 + 自定义正则 + AI 开关 + 模型 ID”
+**实际现象**：
+- 在兼容账号导入模式下继续人工测试时，Microsoft 返回：
+  - `unauthorized_client`
+  - `The client does not exist or is not enabled for consumers`
 
-#### 2. FD 编写：验证码提取提速与 AI 增强（V1）
+**确认结论**：
+- 当前模式不仅要求 `tenant=consumers`、Public Client、无 `client_secret`
+- 还要求 Azure App Registration 的 **Supported account types 必须包含个人 Microsoft 账号**
+- 如果应用只面向组织目录 / 单租户组织账号，即使前端和后端配置都改成兼容模式，授权前也会直接失败
 
-**时间**：2026-04-10
+**本次同步动作**：
+- 更新 `oauth_tool.py` 的 `unauthorized_client` 引导文案：明确提示“支持个人 Microsoft 账号 + 开启公共客户端流”
+- 更新 `templates/token_tool.html` 的 Azure 配置指引：显式写出 Supported account types 的可选项与禁区
+- 更新 README / README.en 与 OAuth Tool 相关 PRD / FD / TD / TDD / TODO 顶部说明，使文档与这次真实报错保持一致
 
-**前置澄清（会话确认）**：
+**针对性回归**：
+- `python -m pytest tests/test_oauth_tool.py -v -k unauthorized_client` → `1 passed`
 
-1. 分组内“长度范围 + 自定义正则”并存时：自定义正则优先
-2. FD 数据承载方案：扩展 `groups` 表字段（不新建策略表）
+#### 14. OAuth Token 工具收口到兼容账号导入模式（专项 + 全量回归通过）
 
-**本次实际操作**：
+**时间**：2026-04-12
 
-1. 更新 PRD：
-   - `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-   - 在“策略配置需求”补充：分组内 regex 优先于 length
+**本轮实现**：
+- 前端页面与侧边栏入口统一改为“兼容账号 Token 导入”口径，Client Secret 改为禁用提示，Tenant 固定为 `consumers`
+- `token_tool.js` 统一按兼容模式收集表单：`client_secret` 强制空字符串，`tenant` 强制 `consumers`，默认 Scope 切换到 IMAP 兼容预设
+- `token_tool.py` 在 `prepare_oauth()`、`save_config()`、`save_to_account()` 增加兼容模式硬校验，直接拒绝非空 `client_secret` 与非 `consumers` tenant
+- `graph.py` 与 `oauth_tool.py` 清理上一轮 tenant/client_secret-aware 临时链路，回到现有账号运行模型
+- `tests/test_oauth_tool.py` 同步改为兼容模式口径：新增 prepare/config/save 的拒绝分支断言，配置返回固定空 `client_secret` 与 `consumers` tenant，并补充 IMAP 默认 Scope 断言
 
-2. 新增 FD：
-   - `docs/FD/2026-04-10-验证码提取提速与AI增强FD.md`
-   - 内容覆盖：
-     - 功能边界与系统行为
-     - groups 表 4 字段扩展方案
-     - groups API 契约扩展与校验规则
-     - 分组设置弹窗交互项与规则
-     - 统一策略解析口径与错误反馈规范
+**当前判断**：
+- Token 工具不再承诺“任意 Azure 应用上下文导入”，而是收敛为与现有购买账号同模型的导入入口
+- 这轮改动用于在工具阶段就拦截不兼容账号，避免保存成功后才在运行态 `GRAPH_TOKEN_FAILED` / `IMAP_TOKEN_FAILED`
 
-**说明**：本次仅文档设计，不涉及业务代码修改。
+**专项回归**：
+- `python -m pytest tests/test_oauth_tool.py -v` → `64 passed`
 
-#### 3. TD 编写：验证码提取提速与 AI 增强（V1）
+**全量回归**：
+- `python -m pytest tests/ -v` → `994 passed, 10 skipped, 2 warnings`
 
-**时间**：2026-04-10
+**服务同步**：
+- 已停止旧服务 PID `12592`
+- 已按当前代码重启本地服务，新 PID `31192`
+- `http://127.0.0.1:5000/login` 返回 `HTTP 200`
 
-**会话确认结果（新增）**：
+#### 15. OAuth Token 获取工具审查提示词（v1.0）
 
-1. 分组内“长度范围 + 自定义正则”并存时，自定义正则优先
-2. 技术落地采用 `groups` 表扩展 4 字段方案（简单直观）
+**时间**：2026-04-12
 
-**本次实际操作**：
+**问题背景**：
+- 基于两轮代码审查经验，为 OAuth Token 获取工具编写专项审查提示词
+- 目标：可交给其他 AI 对该功能实现进行独立审查
 
-1. 更新 PRD 版本到 v2.1，补充“regex 优先”规则
-2. 新增 TD 文档：
-   - `docs/TD/2026-04-10-验证码提取提速与AI增强TD.md`
-3. TD 核心内容：
-   - Schema 迁移（groups 4 字段）
-   - groups repository/controller/route 扩展点
-   - 分组弹窗字段扩展与校验规则
-   - Web + External 提取链路统一策略解析
-   - 兼容性、回滚、验收映射
-4. 修正文档引用：external controller 文件归并为 `outlook_web/controllers/emails.py`
+**产出**：
+- `docs/DEV/oauth-token-review-prompt.md` — OAuth Token 功能专项审查提示词 v1.0
+- 包含：全部 TD 函数签名/路由/配置表、6 项关键技术约束、八维度检查清单、TDD 13 类 59 用例映射
+- 审查重点：功能实现正确性（TD 逐函数比对）+ 回归安全性（测试覆盖有效性）
 
-**说明**：本次为文档阶段，未改动业务代码。
+---
 
-#### 4. PRD/FD/TD 文档联调对齐
+#### 14. OAuth Token 获取工具第二轮代码审查（v1.15.0）
 
-**时间**：2026-04-10
+**时间**：2026-04-12
 
-**目标**：按“需求口径一致、UseCase 可映射、文档可执行”完成三份文档联调。
+**问题背景**：
+- 第一轮审查发现 3 条 Watch Items（均 LOW）
+- 另一 AI 完成保守加固（Scope Chip DOM 创建 + client_secret 兼容策略）后进行第二轮审查
 
-**本次实际操作**：
+**审查范围**：
+- 核心后端 6 + 前端 5 + 测试 1 + 发布/文档 7 = 19 个文件
+- 八维度深度审查：TD/TDD 一致性、OAuth 安全链路、配置安全、账号写入链路、前后端契约、XSS/注入/泄露、测试覆盖、发布文档一致性
 
-1. 新增联调检查文档：
-   - `docs/TD/2026-04-10-验证码提取提速与AI增强-PRD-FD-TD联调检查.md`
-2. 检查项覆盖：
-   - Web + External 同级 P0
-   - 默认 6 位边界（仅验证码）
-   - 分组配置项与优先级（含 regex > length）
-   - AI 开启模型必填约束
-3. 发现并修复：
-   - TD 影响文件清单中 `controllers/emails.py` 重复项已去重
+**审查结论**：
+- **Must-Fix: 0 条**
+- **Watch Items: 1 条（LOW）**：`exchange_token` 中 state 不匹配分支缺少直接单元测试
+- **结论: Merge-Ready**
 
-**联调结论**：
+**验收数据**：
+- `python -m pytest tests/test_oauth_tool.py -v` → `59 passed`
+- `python -m pytest tests/ -v` → `989 passed, 10 skipped, 2 warnings`
 
-- PRD / FD / TD 口径一致，可进入 TDD 与开发阶段。
+**加固确认**：
+- ✅ Scope Chip: `document.createElement()` + `data-scope` + 事件委托
+- ✅ client_secret: 明文→直接返回 / `enc:` 正常→解密 / `enc:` 损坏→返回空串
+- ✅ 新增 2 个专项测试覆盖上述加固
 
-#### 5. TDD 编写：验证码提取提速与 AI 增强（V1）
+---
 
-**时间**：2026-04-10
+#### 13. OAuth Token 工具方向收敛：改为兼容账号导入模式（规划阶段）
 
-**目标**：将已对齐的 PRD/FD/TD 转换为可执行测试设计，确保后续开发可按测试矩阵推进。
+**时间**：2026-04-12
 
-**本次实际操作**：
+**背景判断**：
+- 通过人工测试确认：Token 工具虽然已能完成授权、换 token、保存前验证与账号写入，但“购买账号”运行模型与“用户自备 Azure 应用导入账号”并不是同一类型
+- 现有运行态默认只表达 `client_id + refresh_token`，而用户自备 Azure 应用可能还要求 tenant / client_secret / 单租户上下文
+- 继续在运行时对单租户 / 机密客户端逐点打补丁，会持续扩大复杂度并破坏旧模型稳定性
 
-1. 新增 TDD 文档：
-   - `docs/TDD/2026-04-10-验证码提取提速与AI增强-TDD.md`
-2. 覆盖内容：
-   - 分层测试策略（Repository / groups API / Web 提取 / External 提取 / 前端契约）
-   - 关键测试矩阵（配置、优先级、默认边界）
-   - 回归清单与执行命令
-3. 重点校验目标：
-   - 请求参数 > 分组配置 > 默认
-   - 组内 regex > length
-   - 仅验证码默认 6 位、链接不受影响
-   - AI 开启模型必填
+**本次规划结论**：
+- 不再以“支持任意 Azure 应用导入”为目标
+- 改为“**兼容账号导入模式**”：只允许导入与现有购买账号运行模型一致的账号
+- 兼容模式口径暂定为：`tenant=consumers`、public client、无需 client_secret、不依赖账号级 tenant/secret 运行态上下文
 
-**说明**：本次仅新增测试设计文档，未改动业务代码与测试代码。
+**规划动作**：
+- 已创建会话级 `plan.md`
+- 已拆分后续收敛任务：前端收敛、后端硬校验、测试口径调整、文档统一、临时兼容逻辑清理
+- 当前阶段仅完成方案收敛与计划编写，尚未开始按兼容模式改代码
 
-#### 6. 任务拆分 TODO 文档落地（验证码提取提速与 AI 增强）
+**结论**：
+- 后续实现方向从“扩运行态支持更多 OAuth 模型”转为“收缩 Token 工具输入边界，使导入账号与购买账号模型一致”
+- 该方向更符合当前项目既有运行模型，也更利于控制复杂度
 
-**时间**：2026-04-10
+#### 12. OAuth Token 工具写入前 client_secret 校验链路修复
 
-**背景**：在完成 PRD/FD/TD/TDD 后，进入“可执行实施清单”阶段，按用户要求将实现任务做分阶段拆分，便于后续由其他 AI 或开发同学按清单推进。
+**时间**：2026-04-12
 
-**本次实际操作**：
+**问题背景**：
+- 在 tenant-aware 修复之后，保存前 refresh token 校验继续报 `AADSTS7000218`
+- 排查确认：保存接口虽然已经带上了 `tenant`，但验证请求仍然没有带 `client_secret`
+- 对于机密客户端（confidential client），这会导致保存前验证阶段直接要求 `client_secret` / `client_assertion`
 
-1. 新增 TODO 文档：
-   - `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-2. 文档采用“执行导向拆解”结构：
-   - Phase 0~8（基线冻结 → DB → Repo/API → 前端 → Web/External → 错误码统一 → TDD 转绿 → 发布收尾）
-   - 每个阶段均拆为可勾选任务项（`- [ ]`）
-3. 明确本需求的统一口径（写入 TODO 头部基线）：
-   - Web + External 同级 P0
-   - 默认 6 位仅作用于验证码
-   - 分组内 regex > length
-   - request > group > default
+**本次修复**：
 
-**补充说明**：
+1. client_secret 贯通保存链路
+   - `static/js/features/token_tool.js` 在保存 payload 中补充提交 `client_secret`
+   - `outlook_web/controllers/token_tool.py` 在 `save_to_account()` 中接收 `client_secret`
+   - 仅当实际有值时，才向底层验证函数传递 `client_secret`
 
-- 中途误进入实现代码编辑（`db.py / repositories/groups.py / controllers/groups.py`）后，已按要求回滚，不将该误操作纳入本次方案推进范围。
+2. 保存前验证支持机密客户端
+   - `outlook_web/services/graph.py` 的 `test_refresh_token_with_rotation()` 增加可选 `client_secret`
+   - 当页面已配置 secret 时，保存前 refresh token 校验将一并携带该 secret
 
-#### 7. 验证码提取提速 + AI 增强（V1）实施收尾回填（Phase 8）
+3. 回归与运行态同步
+   - `tests/test_oauth_tool.py` 新增 client-secret-aware 保存验证测试
+   - `python -m pytest tests/test_oauth_tool.py -v` → `62 passed`
+   - 本地服务已重启并确认 `http://127.0.0.1:5000/login` 返回 `HTTP 200`
 
-**时间**：2026-04-10
+**结论**：
+- 机密客户端现在不会再因为保存前验证缺少 `client_secret` 而卡在 `AADSTS7000218`
+- 当前人工测试环境已更新到最新代码，可继续刷新页面验证完整“获取 token → 写入账号”链路
 
-**背景**：在完成 V1 代码与分层测试后，进入发布前文档收尾阶段，对 TODO 执行状态、FD/TD/TDD 实施结果、工作区记录与变更说明进行统一回填。
+#### 11. OAuth Token 工具写入前 tenant-aware 验证修复
 
-**本次实际操作**：
+**时间**：2026-04-12
 
-1. 回填 TODO 执行状态：
-   - 更新 `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-   - 将 Phase 0~6 标记为已完成
-   - 将 Phase 7 标记为“部分完成（7.7 待确认）”
-   - 将 Phase 8 标记为“进行中（8.6 待完成）”
-   - 明确全量 `discover` 输出曾被会话截断，发布前需复跑并留档
+**问题背景**：
+- 人工测试中，Token 获取已经成功，但写入账号前的 refresh_token 验证报错：应用在目录 `Microsoft Accounts` 中不存在
+- 排查确认：OAuth Tool 前面的授权链路按当前表单 Tenant 成功获取了 token，但保存前验证复用了 `graph.py` 里写死 `common` 的旧校验端点
+- 对于单租户 Azure 应用，这会把本应在指定租户里验证的 token 错误地拿去 `common / Microsoft Accounts` 上验证，从而导致保存失败
 
-2. 回填 FD 实施结果与偏差：
-   - 更新 `docs/FD/2026-04-10-验证码提取提速与AI增强FD.md`
-   - 新增“实现结果与偏差回填”章节（端到端落地情况、V1 范围边界、后续建议）
+**本次修复**：
 
-3. 回填 TD 实施结果与偏差：
-   - 更新 `docs/TD/2026-04-10-验证码提取提速与AI增强TD.md`
-   - 新增“实现结果与偏差回填”章节（Schema v20、链路对齐、复用 extractor 说明）
+1. tenant 贯通保存链路
+   - `outlook_web/services/oauth_tool.py` 的 token 结果中补充返回 `tenant`
+   - `static/js/features/token_tool.js` 在保存 payload 中补充提交 `tenant`
+   - `outlook_web/controllers/token_tool.py` 在 `save_to_account()` 中接收 `tenant`
 
-4. 回填 TDD 执行结果：
-   - 更新 `docs/TDD/2026-04-10-验证码提取提速与AI增强-TDD.md`
-   - 新增“执行结果回填”章节（分层通过项、重点回归通过项、全量待复跑项）
+2. 保存前验证 tenant-aware
+   - `outlook_web/services/graph.py` 新增按 tenant 生成 token 端点的能力
+   - `test_refresh_token_with_rotation()` 增加可选 `tenant` 参数
+   - 保存前验证不再固定走 `common`，而是按当前 OAuth 实际 tenant 发起 refresh token 校验
 
-5. 补充发布说明记录（why 导向）：
-   - 更新 `CHANGELOG.md`，新增 Unreleased 条目，强调本次改动目标是统一 Web/External 策略口径、减少提取歧义、避免 AI 配置静默降级。
+3. 回归与运行态同步
+   - `tests/test_oauth_tool.py` 新增 tenant-aware 保存验证测试
+   - `python -m pytest tests/test_oauth_tool.py -v` → `61 passed`
+   - 本地服务已重启并加载最新代码，`http://127.0.0.1:5000/login` 返回 `HTTP 200`
 
-**当前状态**：
+**结论**：
+- 单租户 Azure 应用现在不会再因为保存前验证错误落到 `Microsoft Accounts/common` 而写入失败
+- 当前人工测试环境已切到最新代码，可继续刷新页面验证“获取 token → 写入账号”完整链路
 
-- 文档回填已完成（FD/TD/TDD/TODO/WORKSPACE/CHANGELOG）
-- 全量测试已复跑通过：`Ran 938 tests ... OK (skipped=7)`
-- 发布门槛已满足，可进入人工验收与发布流程
+#### 10. OAuth Token 工具写入账号弹窗错误可视化修复
 
-**说明**：本次主要为文档与记录收尾，不新增功能代码。
+**时间**：2026-04-12
 
-#### 8. 验证码提取提速 + AI 增强（V1）回归修复与全量转绿
+**问题背景**：
+- 人工测试中，OAuth Token 已成功获取，但点击“写入到账号 → 确认写入”后，界面看起来像“按钮没有反应”
+- 通过运行中的服务日志确认，前端实际上已经多次请求 `POST /api/token-tool/save`，且后端返回 `400`
+- 根因不是按钮失效，而是前端把错误提示输出到了弹窗外的主状态栏，用户在 modal 打开状态下看不到
 
-**时间**：2026-04-10
+**本次修复**：
 
-**背景**：在首次全量回归中发现 7 个失败，集中于 external temp-mail 兼容测试（verification-code / verification-link 返回 404）。
+1. 弹窗内错误反馈
+   - 在 `templates/token_tool.html` 的保存弹窗中新增独立状态区
+   - `static/js/features/token_tool.js` 新增弹窗级 `showSaveDialogStatus()` / `clearSaveDialogStatus()`
+   - 保存校验失败、账号列表加载失败、保存接口返回错误时，统一在弹窗内直接展示提示
 
-**根因结论**：
+2. 样式与运行态同步
+   - `static/css/token_tool.css` 增加弹窗状态区样式
+   - 本地服务重启后再次确认 `http://127.0.0.1:5000/login` 返回 `HTTP 200`
 
-1. `get_verification_result()` 仍强依赖 `require_account()`，导致 task temp-mail 场景无法进入统一提取链路。
-2. verification-link 复用了验证码默认长度策略，导致“默认 6 位仅作用于验证码”的边界被破坏。
+**验收结果**：
+- `python -m pytest tests/test_oauth_tool.py -v` → `60 passed`
+- 本地服务已重启并加载最新前端代码
 
-**修复动作**：
+**结论**：
+- 当前“确认写入像没反应”的表现已被修正为“错误直接在弹窗内可见”
+- 后续若再出现写入失败，用户将能直接看到真实后端返回信息，方便继续定位业务原因
 
-1. `outlook_web/services/external_api.py`
-   - `get_verification_result()` 改为基于 `accounts_repo.get_account_by_email()`可选读取分组策略，不再硬依赖 account 必须存在。
-   - 增加 `apply_default_code_length` 参数，控制是否应用默认 `6-6`。
+#### 9. OAuth Token 工具人工测试前回归与服务拉起
 
-2. `outlook_web/controllers/emails.py`
-   - `/api/external/verification-link` 调用 `get_verification_result(..., apply_default_code_length=False)`，恢复链接提取边界。
-
-**验证结果**：
-
-- `tests.test_external_api_temp_mail_compat`：6/6 通过
-- `tests.test_external_verification_group_policy`：3/3 通过
-- `tests.test_extract_verification_group_policy`：5/5 通过
-- `tests.test_external_api`：111/111 通过
-- 全量：`python -m unittest discover -s tests -v` → `Ran 938 tests ... OK (skipped=7)`
-
-**状态**：V1 本轮开发 + 回归 + 文档回填已闭环完成，下一步进入人工启动验证。
-
-#### 9. 需求澄清后文档修订：AI 配置改为系统级（分组仅保留 length/regex）
-
-**时间**：2026-04-10
-
-**用户反馈要点**：
-
-1. 分组不应承载 AI 模型配置。
-2. AI URL / API Key / 模型 ID 属于系统级基础设置，应在设置页统一维护。
-3. 当前仅在分组配置模型 ID 不完整，无法形成可用的真实 AI 配置闭环。
-4. 线上操作反馈出现 `GROUP_VERIFICATION_LENGTH_INVALID`，长度配置体验需优化。
-
-**本次实际操作（文档层）**：
-
-1. 更新 PRD：
-   - `docs/PRD/2026-04-10-验证码提取提速与AI增强PRD.md`
-   - 将 AI 配置口径改为系统级（开关/Base URL/API Key/模型 ID）
-   - 分组策略仅保留 length/regex
-
-2. 更新 FD：
-   - `docs/FD/2026-04-10-验证码提取提速与AI增强FD.md`
-   - 数据模型与接口契约改为“groups 规则 + settings AI 配置”
-   - 标记当前实现存在“分组级 AI 字段遗留”待后续清理
-
-3. 更新 TD：
-   - `docs/TD/2026-04-10-验证码提取提速与AI增强TD.md`
-   - 技术决策改为“AI 配置系统级，groups 去 AI 化”
-   - 增补受影响文件（settings controller/repo）
-
-4. 更新 TDD：
-   - `docs/TDD/2026-04-10-验证码提取提速与AI增强-TDD.md`
-   - 测试目标改为分组仅校验 length/regex
-   - 增加“需求澄清说明”，指明后续测试迁移方向
-
-5. 更新 TODO：
-   - `docs/TODO/2026-04-10-验证码提取提速与AI增强TODO.md`
-   - 新增 Phase 9（待实施）：AI 配置上收系统级 + groups 去 AI 化 + 长度容错优化
-
-**结果与状态**：
-
-- 文档口径已按最新需求完成修订。
-- 代码层“groups 去 AI 化 + settings AI 配置化 + 长度容错”尚未实施，已进入 Phase 9 待执行。
-
-#### 10. BUG 单独建档：分组 AI 配置口径错误 + 验证码长度格式报错
-
-**时间**：2026-04-10
-
-**触发背景**：用户明确要求将本问题作为 BUG 独立记录，而不是直接按需求方案推进。
+**时间**：2026-04-12
 
 **本次操作**：
 
-1. 新增 BUG 文档：
-   - `docs/BUG/2026-04-10-验证码策略-分组AI配置口径错误与长度校验易用性BUG.md`
+1. 全量回归确认
+   - 再次执行 `python -m pytest tests/ -v`
+   - 结果为 `990 passed, 10 skipped, 2 warnings`
+   - warnings 仍是 `tests/test_live_credentials.py` 里既有的 `return bool` 提示，非本轮引入
 
-2. 文档内容覆盖：
-   - 问题拆分：
-     - 分组级 AI 配置口径错误（缺 URL/API Key 闭环）
-     - `GROUP_VERIFICATION_LENGTH_INVALID` 高频触发（严格 `min-max` 导致易用性差）
-   - 复现步骤与预期行为
-   - 根因定位（groups controller/repo + groups.js + modal）
-   - 修复方向（仅建议，待后续实施）
+2. 本地服务启动
+   - 使用项目默认入口 `python start.py` 启动 Flask 服务
+   - 通过 PowerShell `Start-Process` 挂起进程并保留 stdout/stderr 日志
+   - 启动后确认服务监听 `127.0.0.1:5000`
 
-**状态结论**：
+3. 连通性检查
+   - 对 `http://127.0.0.1:5000/login` 发起本地请求
+   - 返回 `HTTP 200`，登录页 HTML 正常返回
 
-- 本问题已以 BUG 形式单独立项。
-- 当前阶段先完成“记录与对齐”，后续在充分读取上下文后再进入代码实施。
+**结论**：
+- 当前代码已完成最新一轮全量回归
+- 本地人工测试服务已成功拉起，可直接基于 `http://127.0.0.1:5000` 继续手工验证
 
-#### 11. BUG 修复（Phase 9 局部）：验证码长度格式容错
+#### 8. OAuth Token 获取工具审查后保守加固与二次回归（v1.15.0）
 
-**时间**：2026-04-10
+**时间**：2026-04-12
 
-**背景**：在 BUG 文档已确认的前提下，按会话决策先落地“长度易用性修复”，AI 系统级迁移后续再做。
+**问题背景**：
+- 在 OAuth Token 工具主功能落地并通过初轮回归后，针对审查结果继续做一轮保守优化
+- 本轮明确不改动 `save_to_account()` 的 TD 主路径，只处理不影响既有设计链路的安全性与兼容性项
 
-**本次代码改动**：
+**本次处理内容**：
 
-1. `outlook_web/repositories/groups.py`
-   - 增强 `_validate_code_length()` 的输入规范化，兼容常见用户输入：
-     - 单值：`6` → `6-6`
-     - 波浪线：`4~8` / `4～8` → `4-8`
-     - 带后缀：`4-8位`、`6 位` → 去后缀后解析
-     - 去除中间空白后再校验
-   - 仍保持最终存储格式为标准 `min-max`。
-   - 对非法输入继续返回原错误码：`GROUP_VERIFICATION_LENGTH_INVALID`（兼容既有错误契约）。
+1. 前端安全加固
+   - `static/js/features/token_tool.js` 中的 Scope Chip 改为 `document.createElement()` 构建
+   - 删除动态 scope 值拼接到 `onclick` 的做法，改为 `data-scope` + 容器事件委托
 
-2. 测试补充与回归：
-   - `tests/test_group_verification_policy_repo.py`
-     - 新增 `test_normalize_group_policy_accepts_common_length_formats`
-   - `tests/test_groups_verification_policy_api.py`
-     - 新增 `test_update_group_accepts_single_length_input`
-     - 新增 `test_update_group_accepts_tilde_length_input`
+2. 配置兼容性明确化
+   - `outlook_web/repositories/settings.py` 中的 `get_oauth_tool_client_secret()` 显式区分明文与 `enc:` 值
+   - 历史明文配置直接返回；不可解密的加密值继续隐藏为空字符串，避免把损坏密文回显到页面
 
-**执行结果**：
+3. 测试与文档同步
+   - `tests/test_oauth_tool.py` 新增 3 个回归用例（2 个配置读取 + 1 个 state mismatch 直接覆盖）
+   - `CHANGELOG.md` 与 `WORKSPACE.md` 同步补充本轮审查后加固记录
 
-- `python -m unittest tests.test_group_verification_policy_repo -v` → 5/5 通过
-- `python -m unittest tests.test_groups_verification_policy_api -v` → 7/7 通过
-- `python -m unittest tests.test_extract_verification_group_policy -v` → 5/5 通过
-- `python -m unittest tests.test_external_verification_group_policy -v` → 3/3 通过
-- `python -m unittest tests.test_group_policy_frontend_contract -v` → 2/2 通过
+**验收结果**：
+- `python -m pytest tests/test_oauth_tool.py -v` → `60 passed`
+- `python -m pytest tests/ -v` → `990 passed, 10 skipped, 2 warnings`
+- warnings 仍来自 `tests/test_live_credentials.py` 中已有的 `return bool` 写法，非本轮引入
 
-**状态**：
+**结论**：
+- OAuth Token 工具在不偏离 TD 主路径的前提下完成了一轮审查后保守加固
+- 前端动态事件拼接风险已收敛，`client_secret` 配置读取策略也与当前实际行为保持一致
 
-- Phase 9 中“长度容错优化”已完成并通过分层回归。
-- “AI 配置系统级迁移（groups 去 AI 化）”仍待后续独立实施。
+#### 1. OAuth Token 获取工具 PRD 编写（Issue #38, #34）
 
-#### 12. 新开 PRD：AI 识别配置系统级化与测试闭环
+**时间**：2026-04-12
 
-**时间**：2026-04-10
+**问题背景**：
+- Issue #38、#34 多位用户反馈需要内置 refresh_token 获取功能
+- 旧版本该功能因设计复杂被废弃,但社区需求持续存在
+- 旧版本内置 client_id 导致 unauthorized_client 报错（Issue #26, #20）
 
-**背景**：会话确认切换到方案 A（软迁移），并要求围绕 AI 板块单独讨论需求与测试口径，新增独立 PRD。
+**讨论与决策**：
 
-**本次操作**：
+1. 方案评估
+   - 方案 A: 深度集成 OAuth 页面 — 耦合度高,维护成本大
+   - **方案 B: 松耦合集成**（✅ 采纳）— 独立 Blueprint 模块,可启用/禁用
+   - 方案 C: 不内置,仅对接外部工具 — 体验割裂
 
-1. 新增独立 PRD 文档：
-   - `docs/PRD/2026-04-10-AI识别配置系统级化与测试闭环PRD.md`
+2. 参考分析
+   - 分析了博客文章「Python实现Microsoft邮件自动化：OAuth2.0认证与邮件处理详细指引」
+   - 分析了 QuickMSToken 项目（somnifex/QuickMSToken）源码实现
+   - 分析了现有代码库 token 刷新架构（graph.py、refresh.py）
 
-2. PRD 聚焦内容：
-   - AI 配置系统级闭环（开关/Base URL/API Key/模型 ID）
-   - Web/External 统一读取口径
-   - 分组策略收敛为 length/regex
-   - 软迁移兼容（deprecated 分组 AI 字段）
-   - 安全要求（密钥存储/脱敏/日志）
-   - 测试闭环与 UC-01~UC-05 验收口径
+3. 核心设计决策
+   - 用户自备 client_id,不内置默认值
+   - 支持 Authorization Code + PKCE 流程
+   - 支持手动回调 URL 粘贴（兼容 Docker/反代部署）
+   - 获取 token 后可一键写入系统账号
 
-**状态**：
+**产出文档**：
+- `docs/PRD/2026-04-12-OAuth-Token获取工具PRD.md`
 
-- 已完成“独立 PRD 建档”。
-- 下一步进入该 PRD 对应 FD/TD/TDD 与实施方案讨论。
+**补充内容（v1.1）**：
+- 新增 2.6 节: Token 工具与现有导入功能的定位区分
+- 新增 2.7 节: 8 种常见 OAuth 错误的中文提示与解决引导
+- 扩展 7.2 节: Azure 应用注册指引改为分步骤详细说明（含直达链接）
+- 新增 Tenant 租户选择器需求（consumers/common/organizations + 自定义）
+- 更新 UI 布局图增加快速指引卡片和 Tenant 下拉
+- 补充验收标准 A-07（Azure 指引）、A-08（多租户）
 
-#### 13. 文档优先推进：AI 配置修复专项补齐 FD/TD/TDD（含固定 JSON 契约）
+**结论**：
+- PRD 已完成 v1.1 版,涵盖产品背景、核心需求、用例、错误引导、安全、部署兼容性等完整内容
+- PRD 已在 FD 讨论后更新为 v1.2，补充页面形态决策和配置持久化策略
 
-**时间**：2026-04-10
+#### 2. OAuth Token 获取工具 FD 编写
 
-**背景**：会话明确要求“先考虑文档相关内容”，并聚焦“修复 AI 配置 + 验证码提取加速 + 固定 JSON 输入输出”。
+**时间**：2026-04-12
 
-**本次文档操作**：
+**讨论与决策**：
 
-1. 更新 PRD（专项口径增强）：
-   - `docs/PRD/2026-04-10-AI识别配置系统级化与测试闭环PRD.md`
-   - 增加“提取加速”与“固定 JSON 输入/输出契约”目标与验收项
+1. 分析现有代码架构
+   - Flask Blueprint 工厂模式（`create_blueprint()` + `add_url_rule()`）
+   - 原生 JS SPA 前端（`navigate()` 页面切换）
+   - `@login_required` Session 认证 + Flask-WTF CSRF
+   - MVC 分层: routes → controllers → services → repositories
 
-2. 新增 FD：
-   - `docs/FD/2026-04-10-AI识别配置系统级化与固定JSON契约FD.md`
-   - 明确 settings 闭环、规则优先快路径、固定 JSON 输入输出格式、异常回退规范
+2. 分析 QuickMSToken 源码（app.py 731 行）
+   - PKCE 生成: `secrets.token_urlsafe(64)` + SHA256
+   - 内存 OAUTH_FLOW_STORE + 线程锁 + 20 分钟 TTL
+   - 双模式: page 模式自动回调 + popup 模式手动粘贴
+   - Scope 校验: 单资源限制、`.default` 混用检测
+   - JWT 不验签解码（仅展示 audience/scope）
 
-3. 新增 TD：
-   - `docs/TD/2026-04-10-AI识别配置系统级化与固定JSON契约TD.md`
-   - 明确分层改造范围（settings/front/提取链路）、契约校验点、兼容策略与错误语义
+3. FD 关键设计决策
+   - **页面形态**: 浏览器新窗口 `window.open()`（D1 方案）
+   - **回调处理**: 智能回调,优先自动降级手动（Q2-A）
+   - **结果传递**: 用户手动复制回调 URL 到主页面（Q3-A，QuickMSToken 方式）
+   - **配置持久化**: 服务端 Settings 表,key 前缀 `oauth_tool_`（Q4-B）
 
-4. 新增 TDD：
-   - `docs/TDD/2026-04-10-AI识别配置系统级化与固定JSON契约TDD.md`
-   - 建立配置闭环/JSON 契约/快路径回退/Web-External 一致性测试矩阵
+4. 前后端模块设计
+   - 后端: 新增 Blueprint `token_tool`（8 个路由）+ Controller + Service（`oauth_tool.py`）
+   - 前端: 独立模板 `token_tool.html` + `token_tool.js` + `token_tool.css`
+   - 回调页: `popup_result.html`（极简,仅显示复制提示或错误引导）
 
-**状态**：
+**产出文档**：
+- `docs/FD/2026-04-12-OAuth-Token获取工具FD.md`
+- `docs/PRD/2026-04-12-OAuth-Token获取工具PRD.md`（v1.2 更新）
 
-- AI 专项文档链（PRD/FD/TD/TDD）已建立。
-- 下一步可按该文档链进入代码实施与测试落地。
+**结论**：
+- FD 已完成 v1.0,涵盖系统架构、数据流、接口设计、前端设计、安全设计、环境变量等完整内容
+- 可直接进入开发阶段
+
+#### 3. OAuth Token 获取工具 TD 编写
+
+**时间**：2026-04-12
+
+**代码库深度分析**：
+
+1. 应用工厂与 Blueprint 注册
+   - `app.py`: 12 个 Blueprint 无条件注册（lines 138-150），本期首例条件注册
+   - Context Processor `inject_app_version()` 注入 `APP_VERSION`（lines 80-82）
+   - CSRF 全局保护 `CSRFProtect`（line 109），部分 Blueprint 传入 `csrf_exempt`
+
+2. 现有 Token 操作体系
+   - `graph.py`: `TOKEN_URL_GRAPH` 使用 `/common/` 硬编码 tenant（line 11）
+   - `get_access_token_graph_result()` 使用 `grant_type=refresh_token`（lines 46-106）
+   - `test_refresh_token_with_rotation()` 返回 `(success, error, new_refresh_token)` 三元组（lines 255-293）
+   - Token 工具将使用 `grant_type=authorization_code`，复用验证函数
+
+3. 加密/配置/Settings 现状
+   - `crypto.py`: `encrypt_data()` 使用 `enc:` 前缀标识 + Fernet 加密（lines 66-80）
+   - `config.py`: `_getenv()` + `env_true()` 模式（lines 6-55）
+   - `settings.py`: `get_setting()` / `set_setting()` + typed getter 模式（已有 CF Worker 先例）
+   - `errors.py`: 已有 8 个 OAuth 相关错误码（lines 49-56, 95-102）
+
+4. 账号管理
+   - `accounts_repo.add_account()`: 自动 `encrypt_data(refresh_token)`（lines 157-236）
+   - `accounts_repo.update_account()`: None 参数不覆盖现有值（lines 239-339）
+   - DB Schema v19，本期无需升级
+
+**核心技术决策**:
+
+| 编号 | 决策 | 选定方案 | 理由 |
+|------|------|---------|------|
+| TD-01 | Schema 变更 | 无需升级（保持 v19） | Settings 表 INSERT OR REPLACE 自动处理，accounts 字段够用 |
+| TD-02 | 配置读取 | settings.py 新增 getter 函数 | 与 CF Worker getter 模式一致，封装优先级链 |
+| TD-03 | CSRF 策略 | 标准流程，不 exempt | 独立模板 Jinja2 注入 csrf_token，GET 请求天然不受 CSRF 保护 |
+| TD-04 | FLOW_STORE 位置 | services/oauth_tool.py 内部 | 紧耦合于 OAuth 流程，Service 自包含模式 |
+| TD-05 | Blueprint 注册 | 条件注册（env_true 模式） | 默认 OAUTH_TOOL_ENABLED=true，遵循 PRD 开箱即用要求 |
+
+**产出文档**：
+- `docs/TD/2026-04-12-OAuth-Token获取工具TD.md`
+
+**结论**：
+- TD 已完成 v1.0，涵盖代码级实现细节：config/settings/service/controller/routes/templates/JS 完整伪代码
+- 11 个章节：文档目标、技术现状、核心决策、后端实现（7 个文件）、前端实现（4 个文件）、安全设计、错误处理、测试策略、实施计划（4 里程碑）、风险缓解、未来优化
+- 与 FD 的区别：TD 精确到行号级代码引用、函数签名、变量命名、参数约束，可直接指导开发
+
+#### 4. PRD/FD/TD 文档联调
+
+**时间**：2026-04-12
+
+**发现的问题与修复**：
+
+1. **PRD 版本号不一致**（严重度: 中）
+   - 问题: PRD 头部标记为 `v1.0`，但实际已经过两次更新（v1.1 补充, v1.2 FD 联动更新）
+   - 修复: 更新为 `v1.3`（含本次联调修正）
+   - 新增 FD/TD 关联文档引用
+
+2. **PRD §4.4 与 FD/TD 的 client_secret 存储策略矛盾**（严重度: 高）
+   - 问题: PRD 明确写 "❌ 不存储 client_secret 到数据库或文件"，但 FD §8.1 和 TD §3.1 设计为 Settings 表加密存储
+   - 原因: FD 讨论阶段（Q4-B 决策）选定了服务端 Settings 表持久化方案，PRD 未同步更新
+   - 修复: 删除 PRD §4.4 中该条约束，补充 v1.2 更新说明；同步更新 §5.1 安全表述
+
+3. **TD save_to_account() 使用了错误的 update_account() 调用方式**（严重度: 高）
+   - 问题: TD 伪代码传入 `email_addr=None, group_id=None, remark=None`，但 `update_account()` 要求这三个参数为必填（`str`/`int`/`str`），传 None 会触发 `if not email_addr → return False`
+   - 修复: 改为先通过 `get_account_by_id()` 获取现有数据，将原字段回传，仅替换 `client_id`/`refresh_token`/`status`
+   - 更新 Q1 说明，纠正 "None 值不覆盖" 的错误描述
+
+4. **TD get_account_list() 调用了不存在的函数**（严重度: 高）
+   - 问题: TD 使用 `accounts_repo.get_all_accounts()`，但 accounts.py 中该函数不存在
+   - 实际函数: `accounts_repo.load_accounts()`（line 47，返回全部账号含解密字段）
+   - 修复: 替换为 `load_accounts()`，补充安全说明（仅提取 4 个非敏感字段返回前端）
+
+5. **FD §7.2/§7.3 与 TD 的配置引用方式不一致**（严重度: 中）
+   - 问题: FD 使用 `from outlook_web.config import OAUTH_TOOL_ENABLED`（常量导入），TD 使用 `app_config.get_oauth_tool_enabled()`（函数调用）
+   - 修复: FD 统一改为函数调用方式（因 config.py 定义的是函数而非常量）
+
+6. **FD 缺少 TD 关联引用**（严重度: 低）
+   - 修复: FD 头部新增 `关联 TD` 字段
+
+**产出变更**：
+- `docs/PRD/2026-04-12-OAuth-Token获取工具PRD.md` → v1.3（修复 #1, #2）
+- `docs/FD/2026-04-12-OAuth-Token获取工具FD.md` → v1.0（修复 #5, #6，内容更新但版本号保持）
+- `docs/TD/2026-04-12-OAuth-Token获取工具TD.md` → v1.1（修复 #3, #4）
+
+**结论**：
+- 三份文档间的术语、API 函数签名、配置引用方式已对齐
+- 2 个高严重度 Bug（会导致运行时失败的伪代码错误）已修复
+- PRD 中被 FD 设计阶段覆盖的约束已标注更新说明
+
+#### 5. TDD 测试设计文档编写
+
+**时间**：2026-04-12
+
+**问题背景**：
+- PRD/FD/TD 已完成并联调通过，需编写独立的 TDD（测试设计文档）指导实现阶段的测试编写
+- TD §8 仅提供测试策略概要（单元 11 + 集成 9 = 20 个用例），需扩展为完整的测试设计
+
+**讨论与决策**：
+
+1. 文件组织方式
+   - 方案 A: 两个文件（与 TD §8 原设计一致）
+   - **方案 B: 一个文件**（✅ 采纳）— `tests/test_oauth_tool.py`，多 TestCase 分组
+   - 方案 C: 三个文件（最细粒度）
+
+2. 测试基础设施分析
+   - 分析了 7 个现有测试文件的 fixture/mock/断言/命名模式
+   - 分析了 errors.py、auth.py、graph.py、accounts.py 的完整函数签名
+   - 确认项目使用 `unittest.TestCase` + `_import_app.py` 模式
+
+**产出变更**：
+- `docs/TDD/2026-04-12-OAuth-Token获取工具TDD.md` → v1.0（新建）
+  - 11 个章节：文档目标、测试目标、测试原则、测试分层设计（13 个 TestCase 分组）、Mock 策略、测试数据、测试难点、前端手动验收、用例总表、执行命令、与 TD 差异说明
+  - 自动化 47 个用例 + 手动验收 8 个场景 = 55 个测试点
+  - 每个用例含用例 ID、场景描述、关键断言、伪代码
+- `docs/TD/2026-04-12-OAuth-Token获取工具TD.md` → v1.2（更新 §8 测试策略）
+  - 测试文件名由两个合并为一个（`test_oauth_tool.py`）
+  - §8 增加 TDD 交叉引用
+  - 头部新增关联 TDD 字段
+
+**结论**：
+- TDD 覆盖了 TD §8 的全部用例并扩展至 47 个自动化用例（原 20 个），增加了 PKCE 字符集、Scope 更多边界、FLOW_STORE 更细粒度、认证拦截、敏感数据过滤等边界场景
+- 识别了 4 个测试难点并提供应对方案：FLOW_STORE 模块级变量隔离、Blueprint 条件注册时机、update_account 必填参数、requests.post Mock 路径
+
+---
+
+#### 6. TODO 任务拆分文档编写
+
+**时间**：2026-04-12
+
+**问题背景**：
+- PRD/FD/TD/TDD 四份文档均已完成并联调通过
+- 需编写 TODO 任务拆分文档，将 TD §9 的 4 个里程碑细化为可执行的开发任务
+
+**讨论与决策**：
+
+1. 分阶段结构（8 个 Phase）
+   - Phase 0: 文档对齐收尾（修复 TDD URL 路径不一致问题）
+   - Phase 1~2: 后端基础层 + Service 核心
+   - Phase 3: Service 层 TDD 测试（先行）
+   - Phase 4~5: 路由层 + API 集成测试
+   - Phase 6: 前端实现
+   - Phase 7: 联调与发布
+
+2. TDD URL 路径修正
+   - 发现 TDD 中所有 API 路径使用了 `/token-tool/api/*` 格式
+   - TD 定义的路由为 `/api/token-tool/*` 格式
+   - 已在编写 TODO 前统一修正 TDD 中约 20 处 URL 路径
+
+**产出变更**：
+- `docs/TODO/2026-04-12-OAuth-Token获取工具TODO.md` → v1.0（新建）
+
+#### 7. OAuth Token 获取工具实现落地（v1.15.0）
+
+**时间**：2026-04-12
+
+**本次实现内容**：
+
+1. 后端基础层
+   - `outlook_web/config.py` 新增 6 个 OAuth Token 工具环境变量 getter
+   - `outlook_web/repositories/settings.py` 新增 6 个 `oauth_tool_*` typed getter
+
+2. OAuth Service 核心
+   - 新增 `outlook_web/services/oauth_tool.py`
+   - 完成 PKCE、Scope 校验、OAUTH_FLOW_STORE、错误引导、JWT payload 解码、authorization_code 换 token
+   - 修正 Microsoft 错误解析：同时保留 `error` 与 `error_description`，保证引导映射稳定
+
+3. 路由与控制器
+   - 新增 `outlook_web/routes/token_tool.py` 与 `outlook_web/controllers/token_tool.py`
+   - `app.py` 条件注册 Blueprint，并注入 `OAUTH_TOOL_ENABLED`
+   - 按实现阶段确认结果，Controller 层统一增加动态开关检查，满足工具关闭时页面/API 一并返回 404
+
+4. 测试
+   - 新增 `tests/test_oauth_tool.py`
+   - 覆盖 Service 29 个用例 + API 33 个用例，共 62 个自动化用例
+
+5. 前端与发布信息
+   - 新增独立页面 `token_tool.html`、回调页 `popup_result.html`
+   - 新增 `static/js/features/token_tool.js`、`static/css/token_tool.css`
+   - `templates/index.html` 侧边栏增加 Token 工具入口
+   - 更新 `CHANGELOG.md`、`README.md`、`README.en.md`、`.env.example`、`docker-compose.yml`
+   - 版本号提升到 `v1.15.0`
+  - 8 个 Phase、43 个 Task
+  - 每个 Task 含文件路径、位置、检查项
+  - 包含依赖关系图、风险提醒表
+  - 映射 TD §4/§5 完整伪代码和 TDD 55 个测试点
+- `docs/TDD/2026-04-12-OAuth-Token获取工具TDD.md`（修正）
+  - 约 20 处 API URL 路径从 `/token-tool/api/*` 修正为 `/api/token-tool/*`，与 TD §4.4 路由定义保持一致
+
+**结论**：
+- 所有开发文档（PRD/FD/TD/TDD/TODO）编写完成，形成完整的文档链路
+- Issue #38 功能从需求分析到任务拆分的文档阶段全部完成
+- 后续进入实现阶段时，按 TODO Phase 0~7 顺序执行
+
+#### 7. 第二次文档联调（TODO 交叉审查）
+
+**时间**：2026-04-12
+
+**问题背景**：
+- TODO v1.0 完成后，需要与 PRD/FD/TD/TDD 全部文档进行交叉一致性校验
+- 确保 TODO 中所有函数名、返回类型、字段名、测试数量与权威文档（TD）完全一致
+
+**审查发现（8 个不一致）**：
+
+| 级别 | 编号 | 问题 | 影响文件 |
+|------|------|------|---------|
+| HIGH | H1 | TODO Phase 2 使用 6 个错误的 Service 函数名（如 `store_flow()` → `store_oauth_flow()`） | TODO |
+| HIGH | H2 | `validate_scope()` 返回类型 `Optional[str]` → `Tuple[str, Optional[str]]` | TODO |
+| HIGH | H3 | TDD §9 用例总数 24+23=47 → 实际 29+28=57（预存 bug） | TDD, TODO |
+| MED | M4 | `get_account_list()` 返回字段 `email_addr, client_id` → `email, account_type` | TODO, TDD |
+| MED | M5 | 删除不存在的 `save_oauth_tool_config()` 函数 | TODO |
+| MED | M6 | 补充缺失的 `get_oauth_tool_prompt_consent()` getter | TODO |
+| LOW | L7 | getter 命名 `get_oauth_tool_tenant_id()` → `get_oauth_tool_tenant()` | TODO |
+| LOW | L8 | `render_page()` 动态开关检查描述修正（与 Task 4.6 统一） | TODO |
+
+**产出变更**：
+- `docs/TODO/2026-04-12-OAuth-Token获取工具TODO.md` → v1.1
+  - 修复全部 8 个不一致问题
+  - 更新版本头部引用 TDD v1.1
+- `docs/TDD/2026-04-12-OAuth-Token获取工具TDD.md` → v1.1
+  - §9 用例总数修正：24→29, 23→28, 47→57, 55→65
+  - A-LIST-01 返回字段修正：`email_addr, client_id` → `email, account_type`
+  - A-LIST-01 伪代码断言对齐 TD §4.5
+
+**结论**：
+- 五份文档（PRD/FD/TD/TDD/TODO）全部完成交叉一致性校验
+- 所有函数名、返回类型、字段名与 TD（权威源）完全对齐
+- 文档链路完整，可进入实现阶段
+
+#### 8. 实现提示词编写 + 文档最终同步
+
+**时间**：2026-04-12
+
+**问题背景**：
+- 用户需要一份自包含的实现提示词，供其他 AI 按文档严格执行开发
+- 第二次联调修正后 TD §8 的测试计数仍沿用旧值，需同步
+
+**操作内容**：
+
+1. TD §8 测试计数同步
+   - §8.1 标题 24 → 29、§8.2 标题 23 → 28、总计 47+8=55 → 57+8=65
+   - TD 版本升级 v1.2 → v1.3
+   - TODO 引用更新为 TD v1.3
+
+2. 编写实现提示词（直接输出，不落地为文件）
+   - 涵盖项目上下文、5 份文档精华、逐 Phase 实现指令
+   - 包含关键陷阱警告和验收标准
+
+**产出变更**：
+- `docs/TD/2026-04-12-OAuth-Token获取工具TD.md` → v1.3（§8 计数同步）
+- `docs/TODO/2026-04-12-OAuth-Token获取工具TODO.md` → v1.1（引用更新 TD v1.3）
+
+**文档最终版本**：
+
+| 文档 | 版本 | 状态 |
+|------|------|------|
+| PRD | v1.3 | ✅ 完成 |
+| FD | v1.0 | ✅ 完成 |
+| TD | v1.3 | ✅ 完成 |
+| TDD | v1.1 | ✅ 完成 |
+| TODO | v1.1 | ✅ 完成 |
+
+---
 
 ## 2026-04-09
 
 ### 操作记录
-
-#### 7. CF临时邮箱接入邮箱池：Phase 1-3 实现 + 部分测试通过
-
-**时间**：2026-04-09
-
-**目标**：实现 CF 临时邮箱接入邮箱池的核心链路（动态创建 claim + 智能删除 complete）。
-
-**实际完成内容**：
-
-**Phase 1: DB Schema v19** ✅
-- `outlook_web/db.py`：`DB_SCHEMA_VERSION = 19`，新增 `temp_mail_meta TEXT` 列
-- 迁移幂等：重复启动不报错
-- 新增唯一索引 `idx_pool_claim_token`、`idx_pool_tasks_unique`
-
-**Phase 2: Pool - claim 动态创建** ✅
-- `outlook_web/repositories/pool.py`：
-  - 新增 `insert_claimed_account()` — 纯 DB 写入（INSERT accounts + claim_log + project_usage）
-  - 移除了对 `services.temp_mail_provider_cf` 的违规导入（架构修复）
-- `outlook_web/services/pool.py`：
-  - 新增 `_create_cf_mailbox_for_pool()` — 调用 CF Provider 创建邮箱
-  - 新增 `_delete_cf_mailbox_nonblocking()` — 非阻塞删除远程 CF 邮箱
-  - `claim_random()` 增强：池空且 provider=cloudflare_temp_mail 时动态创建
-  - Provider 白名单校验：None/'' + 现有 provider + cloudflare_temp_mail
-
-**Phase 3: Pool - complete 智能删除** ✅
-- `services/pool.py` `complete_claim()` 增强：
-  - 事务提交后判断 `result in ('success', 'credential_invalid')` 才调用远程删除
-  - 删除失败非阻塞：仅 warning 日志，不影响本地状态流转
-  - 其他 result（timeout/network_error/provider_blocked）不触发删除
-
-**Phase 5 部分测试** ✅
-- `tests/test_module_boundaries.py`：3/3 通过（验证 repositories 不依赖 services）
-- `tests/test_pool_cf_integration_tdd_skeleton.py`：18/18 通过
-- `tests/test_pool.py`：全部通过（Repository + Service + API）
-- `tests/test_pool_flow_suite.py`：全部通过
-- Pool 相关 70 测试总耗时 4.4s，0 failures
-- 全量测试套件无 FAIL、无 ERROR
-
-**修改文件清单**：
-- `outlook_web/db.py` — Schema v19 迁移（+143 行）
-- `outlook_web/repositories/pool.py` — 新增 `insert_claimed_account()`，移除 CF 导入（+155 行）
-- `outlook_web/services/pool.py` — CF 动态创建/删除逻辑（+219 行）
-- `tests/test_db_migration_task_token_unique.py` — 适配新迁移
-- `tests/test_pool.py` — 新增 CF 相关 Service/Repository 测试（+153 行）
-- `tests/test_pool_flow_suite.py` — 适配增强逻辑（+51 行）
-- `tests/test_pool_cf_integration_tdd_skeleton.py` — **新增** 18 个 TDD 骨架测试
-
-**架构约束验证**：
-- Route → Controller → Service → Repository 分层严格保持
-- Repository 层不依赖任何 Service（包括 temp_mail_provider_cf）
-- CF 上游调用（create_mailbox / delete_mailbox）全部在 Service 层
-
-**待完成**：
-- ~~Phase 0: 文档对齐收尾（PRD/FD/TD 接口名/schema 版本）~~ ✅ 已完成
-- ~~Phase 4: external 读信链路适配（mailbox_resolver 识别 CF pool 账号）~~ ✅ 已完成
-- Phase 5: 补充 external 读信链路测试、DB v19 迁移测试
-- Phase 6: 联调与验收
-
-#### 7b. Phase 0 文档对齐收尾
-
-**时间**：2026-04-09
 
 **操作内容**：
 - PRD：6 处修改

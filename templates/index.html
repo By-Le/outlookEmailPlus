@@ -43,6 +43,11 @@
                 </button>
 
                 <div class="nav-section">Token</div>
+                {% if OAUTH_TOOL_ENABLED %}
+                <button class="nav-item" onclick="window.open('/token-tool', 'token-tool', 'width=720,height=860,scrollbars=yes')" title="OAuth Token 工具">
+                    <span class="nav-icon">🔑</span><span>Token 工具</span>
+                </button>
+                {% endif %}
                 <button class="nav-item" data-page="refresh-log" onclick="navigate('refresh-log')">
                     <span class="nav-icon">🔄</span><span>刷新日志</span>
                 </button>

@@ -2,9 +2,14 @@
 
 All notable changes to OutlookMail Plus are documented in this file.
 
-## [Unreleased]
+## [v1.15.0] - 2026-04-12
 
-### 验证码提取策略与 AI 配置重构（Web + External + Temp Mail）
+### 新功能 / New Features
+
+- **OAuth Token 获取工具**：新增独立 Token 工具窗口，支持 Authorization Code + PKCE、手动粘贴回调 URL、Scope 校验、JWT 诊断信息展示
+- **兼容账号导入模式**：OAuth Token 工具现固定面向个人 Microsoft 账号导入，要求 Public Client、`tenant=consumers`、`client_secret` 为空
+- **账号一键写回**：获取到的 refresh token 可直接更新已有 Outlook 账号或创建新账号，并在写入前执行 token 有效性校验与轮换处理
+- **配置持久化与环境变量开关**：支持 `oauth_tool_*` Settings 持久化、`OAUTH_TOOL_ENABLED` 总开关，以及 Client ID / Redirect URI / Scope / Tenant 的环境变量默认值
 
 - **分层口径收敛（why）**：分组策略仅保留规则项（`verification_code_length`、`verification_code_regex`），运行期 AI 配置统一迁移到系统设置（settings Basic Tab），避免“分组配置与系统配置双口径”导致的运维混乱。
 - **系统级 AI 配置闭环（why）**：`GET/PUT /api/settings` 新增并承载 `verification_ai_enabled/base_url/api_key/model`；API Key 加密存储、脱敏回显；开启 AI 时执行保存期完整性校验。
@@ -13,14 +18,12 @@ All notable changes to OutlookMail Plus are documented in this file.
 - **固定 JSON 契约（why）**：新增 AI 输入/输出固定 JSON 契约（`verification_ai_v1`），并在服务端进行结构与类型校验，降低模型返回漂移风险。
 - **前端迁移策略（why）**：分组弹窗移除 AI 字段，历史 group AI payload 软兼容（忽略旧字段，不硬失败），实现平滑内部切换。
 
-### 错误码与兼容性
-
-- 新增并统一错误码映射：`GROUP_VERIFICATION_LENGTH_INVALID`、`GROUP_VERIFICATION_REGEX_INVALID`、`VERIFICATION_AI_CONFIG_INCOMPLETE`。
-- 保持提取未命中语义稳定（如 `VERIFICATION_CODE_NOT_FOUND` / `VERIFICATION_LINK_NOT_FOUND`），避免影响既有调用方错误处理逻辑。
-- 修复本地直启环境一致性问题：`web_outlook_app.py` 现在会自动加载 `.env`，避免 `SECRET_KEY` 未注入导致的凭据解密失败与“看似功能回退”的误判。
-- 修复邮件通知测试链路在 `SMTP_PORT=587` 且环境残留 `EMAIL_NOTIFICATION_SMTP_USE_SSL=true` 时的模式冲突：新增端口驱动的传输模式规范化（587 强制 STARTTLS、465 强制 SSL），避免 `/api/settings/email-test` 在测试与运行时出现误报 502。
-
-### 验证码 AI 配置可用性探测（settings）
+- 修复 Microsoft token 端点仅返回 `error_description` 时无法命中错误引导的问题，现会同时保留 `error` 码用于稳定映射
+- 修复工具关闭场景下 Blueprint 已注册但测试期望动态 404 的问题，Controller 层现统一执行开关检查
+- 加固 Token 工具的 Scope Chip 渲染逻辑，改为 DOM 创建 + 事件委托，避免将动态 scope 值拼进内联 `onclick`
+- 明确 `oauth_tool_client_secret` 的兼容读取策略：历史明文配置继续可读，不可解密的 `enc:` 值保持隐藏为空字符串
+- 修复 Token 工具“写入账号”弹窗在校验失败或接口返回 400 时提示被主状态栏遮住、表现为“确认写入没反应”的问题，错误现已直接显示在弹窗内
+- 收敛 Token 工具为兼容账号导入模式：前端禁用 `client_secret`、Tenant 固定 `consumers`、默认 Scope 切换到 IMAP 兼容预设，`prepare/config/save` 接口统一拒绝不兼容配置，避免“保存成功但运行态刷新失败”的模型错位
 
 - 新增 `POST /api/settings/verification-ai-test`：基于**已保存**的系统级 AI 配置执行连通性与契约探测，返回结构化诊断结果（`ok/error/message/latency_ms/http_status/parsed_output`）。
 - 探测口径调整为“连通性优先”：上游返回 HTTP 2xx 即判定 `ok=true`；同时暴露 `connectivity_ok` 与 `contract_ok` 区分“可连通”与“契约完全通过”。

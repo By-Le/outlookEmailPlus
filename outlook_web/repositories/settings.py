@@ -363,3 +363,57 @@ def get_telegram_bot_token() -> str:
         except Exception:
             return ""
     return value
+
+
+# ---- OAuth Token 工具配置 ----
+
+
+def get_oauth_tool_client_id() -> str:
+    """Settings 表 → 环境变量 → 空字符串"""
+    value = get_setting("oauth_tool_client_id")
+    if value:
+        return value
+    return config.get_oauth_client_id_default()
+
+
+def get_oauth_tool_client_secret() -> str:
+    """Settings 表（自动解密/兼容历史明文） → 环境变量 → 空字符串"""
+    value = get_setting("oauth_tool_client_secret")
+    if value:
+        if not value.startswith("enc:"):
+            return value
+        try:
+            return decrypt_data(value)
+        except Exception:
+            return ""
+    return config.get_oauth_client_secret_default()
+
+
+def get_oauth_tool_redirect_uri() -> str:
+    """Settings 表 → 环境变量 → 空字符串"""
+    value = get_setting("oauth_tool_redirect_uri")
+    if value:
+        return value
+    return config.get_oauth_redirect_uri_default()
+
+
+def get_oauth_tool_scope() -> str:
+    """Settings 表 → 环境变量 → 默认 IMAP 兼容 scope"""
+    value = get_setting("oauth_tool_scope")
+    if value:
+        return value
+    return config.get_oauth_scope_default()
+
+
+def get_oauth_tool_tenant() -> str:
+    """Settings 表 → 环境变量 → 'consumers'"""
+    value = get_setting("oauth_tool_tenant")
+    if value:
+        return value
+    return config.get_oauth_tenant_default()
+
+
+def get_oauth_tool_prompt_consent() -> bool:
+    """Settings 表 → False"""
+    value = get_setting("oauth_tool_prompt_consent", "false")
+    return value.lower() == "true"

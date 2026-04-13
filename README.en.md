@@ -38,7 +38,16 @@ The repository already includes some screenshots, and more can be added later.
 
 Highlights include:
 
-- Current stable version: `v1.13.0`
+- Current stable version: `v1.15.0`
+
+**OAuth Token Tool**
+- Added a dedicated popup-style token tool for **compatibility-mode account import**
+- The supported contract is now fixed to personal Microsoft accounts: Public Client, `tenant=consumers`, and no `client_secret`
+- The Azure app registration should use **Accounts in any identity provider or organizational directory and personal Microsoft accounts**; org-only apps fail with `unauthorized_client`, while **Personal Microsoft accounts only** conflicts with the current `/common` validation/runtime model and can fail with `AADSTS9002331`
+- If Azure blocks the audience change with `Property api.requestedAccessTokenVersion is invalid`, update `api.requestedAccessTokenVersion` to `2` in the **Manifest** first
+- For actual mailbox fetching, Azure API permissions should include **Office 365 Exchange Online → IMAP.AccessAsUser.All**; if you also want the Graph path to work, add **Microsoft Graph → Mail.Read**
+- Supports Graph / IMAP scope presets, error guidance, and JWT audience/scope diagnostics, with IMAP compatibility scope recommended by default
+- Supports writing refresh tokens into existing Outlook accounts or creating new accounts after validation, while rejecting incompatible configurations
 
 **One-Click Update**
 - Two update methods: Watchtower (recommended) and Docker API self-update (advanced)
@@ -213,10 +222,18 @@ python -m unittest discover -s tests -v
   Web server bind address
 - `SCHEDULER_AUTOSTART`
   Whether background scheduler jobs start automatically
+- `OAUTH_TOOL_ENABLED`
+  Enables or disables the OAuth token tool entry and related APIs, default `true`
 - `OAUTH_CLIENT_ID`
   Outlook OAuth application ID
+- `OAUTH_CLIENT_SECRET`
+  Must remain empty in compatibility mode; Azure apps that require a `client_secret` are outside the supported contract
 - `OAUTH_REDIRECT_URI`
   Outlook OAuth callback URL
+- `OAUTH_SCOPE`
+  Default scope for the token tool, default `offline_access https://outlook.office.com/IMAP.AccessAsUser.All`
+- `OAUTH_TENANT`
+  Default tenant for the token tool, fixed to compatibility-mode `consumers`
 - `GPTMAIL_BASE_URL`
   GPTMail service URL
 - `GPTMAIL_API_KEY`

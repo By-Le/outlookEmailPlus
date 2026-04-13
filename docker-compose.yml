@@ -27,6 +27,14 @@ services:
       SECRET_KEY: "${SECRET_KEY:?请在 .env 中设置 SECRET_KEY（必须稳定，用于加密数据库敏感信息）}"
       # 一键更新 Token：与下方 watchtower 服务保持一致；留空将使用内置默认值，可直接工作
       WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
+      # OAuth Token 工具（可选；如需显式覆盖，可在 .env 中配置下列变量）
+      # OAUTH_TOOL_ENABLED: "true"
+      # OAUTH_CLIENT_ID: ""
+      # OAUTH_CLIENT_SECRET: ""
+      # OAUTH_REDIRECT_URI: ""
+      # OAUTH_SCOPE: "offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
+      # Graph 仅为可选扩展："offline_access https://graph.microsoft.com/.default"
+      # OAUTH_TENANT: "consumers"
       # Docker API 自更新（可选，高级功能；需同时取消下方 docker.sock 挂载注释）
       DOCKER_SELF_UPDATE_ALLOW: "${DOCKER_SELF_UPDATE_ALLOW:-false}"
 
