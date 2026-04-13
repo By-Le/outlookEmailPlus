@@ -1050,12 +1050,7 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
         _stripped = _line.strip()
         if not _stripped:
             continue
-        if (
-            _merged
-            and not _merged[-1].lstrip().startswith("#")
-            and "----" not in _stripped
-            and not _stripped.startswith("#")
-        ):
+        if _merged and not _merged[-1].lstrip().startswith("#") and "----" not in _stripped and not _stripped.startswith("#"):
             _merged[-1] += _stripped
         else:
             _merged.append(_stripped)

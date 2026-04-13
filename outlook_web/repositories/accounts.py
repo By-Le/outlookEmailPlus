@@ -113,11 +113,7 @@ def load_accounts(group_id: int = None) -> List[Dict]:
         except Exception:
             account_id_value = None
 
-        account["tags"] = (
-            tags_by_account.get(account_id_value, [])
-            if account_id_value is not None
-            else []
-        )
+        account["tags"] = tags_by_account.get(account_id_value, []) if account_id_value is not None else []
         accounts.append(account)
     return accounts
 
@@ -276,11 +272,7 @@ def add_account(
     db = db or get_db()
     try:
         account_type = (account_type or "outlook").strip().lower()
-        provider = (
-            (provider or ("outlook" if account_type != "imap" else "custom"))
-            .strip()
-            .lower()
-        )
+        provider = (provider or ("outlook" if account_type != "imap" else "custom")).strip().lower()
 
         # PRD-00005 / TDD-00005：
         # - Outlook：必须提供 client_id/refresh_token（OAuth2）
@@ -295,12 +287,8 @@ def add_account(
                 return False
 
         encrypted_password = encrypt_data(password) if password else password
-        encrypted_refresh_token = (
-            encrypt_data(refresh_token) if refresh_token else refresh_token
-        )
-        encrypted_imap_password = (
-            encrypt_data(imap_password) if imap_password else imap_password
-        )
+        encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else refresh_token
+        encrypted_imap_password = encrypt_data(imap_password) if imap_password else imap_password
         initial_pool_status = "available" if add_to_pool else None
         email_domain = _normalize_account_email_domain(email_addr)
 
@@ -399,11 +387,7 @@ def update_account(
             db.commit()
             return True
 
-        new_client_id = (
-            client_id.strip()
-            if isinstance(client_id, str) and client_id.strip()
-            else existing["client_id"]
-        )
+        new_client_id = client_id.strip() if isinstance(client_id, str) and client_id.strip() else existing["client_id"]
 
         encrypted_password = existing["password"]
         if isinstance(password, str) and password.strip():
@@ -446,9 +430,7 @@ def delete_account_by_id(account_id: int) -> bool:
     db = get_db()
     try:
         db.execute("DELETE FROM account_claim_logs WHERE account_id = ?", (account_id,))
-        db.execute(
-            "DELETE FROM account_project_usage WHERE account_id = ?", (account_id,)
-        )
+        db.execute("DELETE FROM account_project_usage WHERE account_id = ?", (account_id,))
         cursor = db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
         db.commit()
         return True
@@ -460,9 +442,7 @@ def delete_account_by_email(email_addr: str) -> bool:
     """根据邮箱地址删除账号"""
     db = get_db()
     try:
-        row = db.execute(
-            "SELECT id FROM accounts WHERE email = ?", (email_addr,)
-        ).fetchone()
+        row = db.execute("SELECT id FROM accounts WHERE email = ?", (email_addr,)).fetchone()
         if not row:
             return False
         return delete_account_by_id(int(row["id"]))
@@ -520,9 +500,7 @@ def get_account_compact_summary(account_id: int) -> Optional[Dict[str, str]]:
 
 def update_account_compact_summary(account_id: int, summary: Dict[str, Any]) -> bool:
     db = get_db()
-    existing = db.execute(
-        "SELECT id FROM accounts WHERE id = ?", (account_id,)
-    ).fetchone()
+    existing = db.execute("SELECT id FROM accounts WHERE id = ?", (account_id,)).fetchone()
     if not existing:
         return False
 
@@ -582,9 +560,7 @@ def toggle_telegram_push(account_id: int, enabled: bool) -> bool:
                 (channel, source_type, source_key, now_utc),
             )
     else:
-        db.execute(
-            "UPDATE accounts SET telegram_push_enabled = 0 WHERE id = ?", (account_id,)
-        )
+        db.execute("UPDATE accounts SET telegram_push_enabled = 0 WHERE id = ?", (account_id,))
 
     db.commit()
     return True

@@ -88,9 +88,7 @@ class OAuthToolTestBase(unittest.TestCase):
         return resp
 
     @staticmethod
-    def _mock_microsoft_error_response(
-        error="invalid_grant", description="Token expired"
-    ):
+    def _mock_microsoft_error_response(error="invalid_grant", description="Token expired"):
         resp = MagicMock()
         resp.status_code = 400
         resp.json.return_value = {
@@ -102,16 +100,8 @@ class OAuthToolTestBase(unittest.TestCase):
 
     @staticmethod
     def _build_jwt(payload_data):
-        header = (
-            base64.urlsafe_b64encode(json.dumps({"alg": "RS256"}).encode())
-            .rstrip(b"=")
-            .decode()
-        )
-        payload = (
-            base64.urlsafe_b64encode(json.dumps(payload_data).encode())
-            .rstrip(b"=")
-            .decode()
-        )
+        header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256"}).encode()).rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).rstrip(b"=").decode()
         return f"{header}.{payload}.fake-signature"
 
 
@@ -135,11 +125,7 @@ class OAuthToolPkceTests(OAuthToolTestBase):
         from outlook_web.services.oauth_tool import generate_pkce
 
         verifier, challenge = generate_pkce()
-        expected = (
-            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
-            .rstrip(b"=")
-            .decode("ascii")
-        )
+        expected = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
         self.assertEqual(challenge, expected)
 
     def test_generate_pkce_uniqueness(self):
@@ -154,9 +140,7 @@ class OAuthToolScopeTests(OAuthToolTestBase):
     def test_validate_scope_graph_default_ok(self):
         from outlook_web.services.oauth_tool import validate_scope
 
-        normalized, error = validate_scope(
-            "offline_access https://graph.microsoft.com/.default"
-        )
+        normalized, error = validate_scope("offline_access https://graph.microsoft.com/.default")
         self.assertIsNone(error)
         self.assertEqual(
             set(normalized.split()),
@@ -166,9 +150,7 @@ class OAuthToolScopeTests(OAuthToolTestBase):
     def test_validate_scope_imap_ok(self):
         from outlook_web.services.oauth_tool import validate_scope
 
-        normalized, error = validate_scope(
-            "offline_access https://outlook.office.com/IMAP.AccessAsUser.All"
-        )
+        normalized, error = validate_scope("offline_access https://outlook.office.com/IMAP.AccessAsUser.All")
         self.assertIsNone(error)
         self.assertEqual(
             set(normalized.split()),
@@ -186,9 +168,7 @@ class OAuthToolScopeTests(OAuthToolTestBase):
     def test_validate_scope_mixed_default_and_named(self):
         from outlook_web.services.oauth_tool import validate_scope
 
-        normalized, error = validate_scope(
-            "https://graph.microsoft.com/.default https://graph.microsoft.com/Mail.Read"
-        )
+        normalized, error = validate_scope("https://graph.microsoft.com/.default https://graph.microsoft.com/Mail.Read")
         self.assertIn("https://graph.microsoft.com/.default", normalized)
         self.assertIsNotNone(error)
         self.assertIn("不能和命名 scope 混用", error)
@@ -212,9 +192,7 @@ class OAuthToolScopeTests(OAuthToolTestBase):
     def test_normalize_scope_no_duplicate(self):
         from outlook_web.services.oauth_tool import normalize_scope
 
-        result = normalize_scope(
-            "offline_access offline_access https://graph.microsoft.com/.default"
-        )
+        result = normalize_scope("offline_access offline_access https://graph.microsoft.com/.default")
         self.assertEqual(result.split().count("offline_access"), 1)
 
 
@@ -365,9 +343,7 @@ class OAuthToolJwtDecodeTests(OAuthToolTestBase):
     def test_decode_jwt_missing_padding(self):
         from outlook_web.services.oauth_tool import decode_jwt_payload
 
-        token = self._build_jwt(
-            {"aud": "https://outlook.office.com", "scp": "IMAP.AccessAsUser.All"}
-        )
+        token = self._build_jwt({"aud": "https://outlook.office.com", "scp": "IMAP.AccessAsUser.All"})
         result = decode_jwt_payload(token)
         self.assertEqual(result.get("aud"), "https://outlook.office.com")
         self.assertEqual(result.get("scp"), "IMAP.AccessAsUser.All")
@@ -457,9 +433,7 @@ class OAuthToolTokenExchangeTests(OAuthToolTestBase):
         )
         self.assertIsNone(error)
         self.assertEqual(result["refresh_token"], "mock-new-rt")
-        self.assertEqual(
-            mock_post.call_args.kwargs["data"]["client_secret"], "super-secret"
-        )
+        self.assertEqual(mock_post.call_args.kwargs["data"]["client_secret"], "super-secret")
         self.assertEqual(
             mock_post.call_args.args[0],
             "https://login.microsoftonline.com/organizations/oauth2/v2.0/token",
@@ -476,9 +450,7 @@ class OAuthToolTokenExchangeTests(OAuthToolTestBase):
                 "roles": ["Mail.Send"],
             }
         )
-        mock_post.return_value = self._mock_microsoft_token_response(
-            access_token=access_token
-        )
+        mock_post.return_value = self._mock_microsoft_token_response(access_token=access_token)
         result, error = exchange_code_for_tokens(
             code="mock-auth-code",
             oauth_config={
@@ -632,9 +604,7 @@ class OAuthToolApiExchangeTests(OAuthToolTestBase):
                     "redirect_uri": "http://localhost:5000/token-tool/callback",
                 },
             )
-            authorize_url = (
-                prep_resp.get_json().get("data", {}).get("authorize_url", "")
-            )
+            authorize_url = prep_resp.get_json().get("data", {}).get("authorize_url", "")
             state = parse_qs(urlparse(authorize_url).query).get("state", [""])[0]
             exch_resp = client.post(
                 "/api/token-tool/exchange",
@@ -673,12 +643,8 @@ class OAuthToolApiExchangeTests(OAuthToolTestBase):
                     "redirect_uri": "http://localhost:5000/token-tool/callback",
                 },
             )
-            authorize_url = (
-                prep_resp.get_json().get("data", {}).get("authorize_url", "")
-            )
-            original_state = parse_qs(urlparse(authorize_url).query).get("state", [""])[
-                0
-            ]
+            authorize_url = prep_resp.get_json().get("data", {}).get("authorize_url", "")
+            original_state = parse_qs(urlparse(authorize_url).query).get("state", [""])[0]
             self.assertTrue(original_state)
 
             resp = client.post(
@@ -706,9 +672,7 @@ class OAuthToolApiExchangeTests(OAuthToolTestBase):
                     "redirect_uri": "http://localhost:5000/token-tool/callback",
                 },
             )
-            authorize_url = (
-                prep_resp.get_json().get("data", {}).get("authorize_url", "")
-            )
+            authorize_url = prep_resp.get_json().get("data", {}).get("authorize_url", "")
             state = parse_qs(urlparse(authorize_url).query).get("state", [""])[0]
             oauth_tool_service.discard_oauth_flow(state)
             resp = client.post(
@@ -781,12 +745,8 @@ class OAuthToolApiConfigTests(OAuthToolTestBase):
             self._login(client)
             load_resp = client.get("/api/token-tool/config")
             self.assertEqual(load_resp.status_code, 200)
-            self.assertEqual(
-                load_resp.get_json().get("data", {}).get("client_secret"), ""
-            )
-            self.assertEqual(
-                load_resp.get_json().get("data", {}).get("tenant"), "consumers"
-            )
+            self.assertEqual(load_resp.get_json().get("data", {}).get("client_secret"), "")
+            self.assertEqual(load_resp.get_json().get("data", {}).get("tenant"), "consumers")
 
     def test_config_load_migrates_legacy_graph_scope_to_imap_default(self):
         with self.app.app_context():
@@ -812,12 +772,8 @@ class OAuthToolApiConfigTests(OAuthToolTestBase):
             self._login(client)
             load_resp = client.get("/api/token-tool/config")
             self.assertEqual(load_resp.status_code, 200)
-            self.assertEqual(
-                load_resp.get_json().get("data", {}).get("client_id"), "env-cid-123"
-            )
-            self.assertEqual(
-                load_resp.get_json().get("data", {}).get("tenant"), "consumers"
-            )
+            self.assertEqual(load_resp.get_json().get("data", {}).get("client_id"), "env-cid-123")
+            self.assertEqual(load_resp.get_json().get("data", {}).get("tenant"), "consumers")
 
     def test_config_defaults_to_imap_compat_scope(self):
         with self.app.test_client() as client:
@@ -848,9 +804,7 @@ class OAuthToolApiSaveTests(OAuthToolTestBase):
             from outlook_web.db import get_db
 
             db = get_db()
-            db.execute(
-                "UPDATE accounts SET status = 'inactive' WHERE id = ?", (acc_id,)
-            )
+            db.execute("UPDATE accounts SET status = 'inactive' WHERE id = ?", (acc_id,))
             db.commit()
 
         with self.app.test_client() as client:
@@ -965,9 +919,7 @@ class OAuthToolApiSaveTests(OAuthToolTestBase):
         )
 
     @patch("outlook_web.services.graph.test_refresh_token_with_rotation")
-    def test_save_personal_only_app_returns_common_endpoint_guidance(
-        self, mock_test_rt
-    ):
+    def test_save_personal_only_app_returns_common_endpoint_guidance(self, mock_test_rt):
         mock_test_rt.return_value = (
             False,
             "AADSTS9002331: Application 'test' is configured for use by Microsoft Account users only. Please use the /consumers endpoint to serve this request.",
@@ -1165,9 +1117,7 @@ class OAuthToolApiAccountListTests(OAuthToolTestBase):
             self.assertIn("email", acc)
             self.assertIn("status", acc)
             self.assertIn("account_type", acc)
-            self.assertTrue(
-                all(item.get("account_type") in ("outlook", None) for item in accounts)
-            )
+            self.assertTrue(all(item.get("account_type") in ("outlook", None) for item in accounts))
 
     def test_accounts_list_excludes_sensitive_fields(self):
         self._insert_test_account(email="sensitive-test@oauth-test.com")
@@ -1208,7 +1158,5 @@ class OAuthToolSettingsCompatTests(OAuthToolTestBase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            settings_repo.set_setting(
-                "oauth_tool_client_secret", "enc:not-a-valid-token"
-            )
+            settings_repo.set_setting("oauth_tool_client_secret", "enc:not-a-valid-token")
             self.assertEqual(settings_repo.get_oauth_tool_client_secret(), "")

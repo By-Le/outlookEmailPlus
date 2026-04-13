@@ -72,23 +72,17 @@ def prepare_oauth() -> Any:
 
     client_id = (data.get("client_id") or "").strip()
     if not client_id:
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", "Client ID 不能为空", status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", "Client ID 不能为空", status=400)
 
     redirect_uri = (data.get("redirect_uri") or "").strip()
     if not redirect_uri or not redirect_uri.startswith(("http://", "https://")):
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", "Redirect URI 格式无效", status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", "Redirect URI 格式无效", status=400)
 
     client_secret = (data.get("client_secret") or "").strip()
     tenant = (data.get("tenant") or COMPATIBLE_TENANT).strip() or COMPATIBLE_TENANT
     compatibility_error = _compatibility_mode_error(client_secret, tenant)
     if compatibility_error:
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", compatibility_error, status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", compatibility_error, status=400)
 
     oauth_config = {
         "client_id": client_id,
@@ -142,9 +136,7 @@ def exchange_token() -> Any:
     data = request.get_json(silent=True) or {}
     callback_url = (data.get("callback_url") or "").strip()
     if not callback_url:
-        return build_error_response(
-            "OAUTH_CODE_PARSE_FAILED", "请粘贴回调 URL", status=400
-        )
+        return build_error_response("OAUTH_CODE_PARSE_FAILED", "请粘贴回调 URL", status=400)
 
     parsed = urlparse(callback_url)
     qs = parse_qs(parsed.query)
@@ -152,13 +144,9 @@ def exchange_token() -> Any:
     state = (qs.get("state") or [None])[0]
 
     if not code:
-        return build_error_response(
-            "OAUTH_CODE_PARSE_FAILED", "URL 中未包含 code 参数", status=400
-        )
+        return build_error_response("OAUTH_CODE_PARSE_FAILED", "URL 中未包含 code 参数", status=400)
     if not state:
-        return build_error_response(
-            "OAUTH_CODE_PARSE_FAILED", "URL 中未包含 state 参数", status=400
-        )
+        return build_error_response("OAUTH_CODE_PARSE_FAILED", "URL 中未包含 state 参数", status=400)
 
     # 双层 state 校验 (FD §5.3): Session cookie 防 CSRF + 内存 Store 携带 PKCE verifier
     session_state = session.get("oauth_state")
@@ -201,9 +189,7 @@ def exchange_token() -> Any:
                 status=400,
                 details=error_info.get("guidance"),
             )
-        return build_error_response(
-            "OAUTH_MICROSOFT_REQUEST_FAILED", str(error_info), status=400
-        )
+        return build_error_response("OAUTH_MICROSOFT_REQUEST_FAILED", str(error_info), status=400)
 
     log_audit("create", "oauth_token", flow_data["client_id"], "Token 获取成功")
     return jsonify({"success": True, "data": token_data})
@@ -218,22 +204,16 @@ def save_to_account() -> Any:
     client_id = (data.get("client_id") or "").strip()
 
     if not refresh_token:
-        return build_error_response(
-            "OAUTH_REFRESH_TOKEN_MISSING", "refresh_token 不能为空", status=400
-        )
+        return build_error_response("OAUTH_REFRESH_TOKEN_MISSING", "refresh_token 不能为空", status=400)
     if not client_id:
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", "client_id 不能为空", status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", "client_id 不能为空", status=400)
 
     compatibility_error = _compatibility_mode_error(
         (data.get("client_secret") or "").strip(),
         (data.get("tenant") or COMPATIBLE_TENANT).strip() or COMPATIBLE_TENANT,
     )
     if compatibility_error:
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", compatibility_error, status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", compatibility_error, status=400)
 
     validation_scope = (data.get("scope") or "").strip() or COMPATIBLE_SCOPE
     if validation_scope == LEGACY_GRAPH_SCOPE:
@@ -259,15 +239,11 @@ def save_to_account() -> Any:
     if mode == "update":
         account_id = data.get("account_id")
         if not account_id:
-            return build_error_response(
-                "OAUTH_CONFIG_INVALID", "account_id 不能为空", status=400
-            )
+            return build_error_response("OAUTH_CONFIG_INVALID", "account_id 不能为空", status=400)
         try:
             account_id_int = int(account_id)
         except (TypeError, ValueError):
-            return build_error_response(
-                "OAUTH_CONFIG_INVALID", "account_id 格式无效", status=400
-            )
+            return build_error_response("OAUTH_CONFIG_INVALID", "account_id 格式无效", status=400)
 
         existing = accounts_repo.get_account_by_id(account_id_int)
         if not existing:
@@ -315,9 +291,7 @@ def save_to_account() -> Any:
     if mode == "create":
         email = (data.get("email") or "").strip()
         if not email or "@" not in email:
-            return build_error_response(
-                "OAUTH_CONFIG_INVALID", "邮箱格式无效", status=400
-            )
+            return build_error_response("OAUTH_CONFIG_INVALID", "邮箱格式无效", status=400)
 
         success = accounts_repo.add_account(
             email_addr=email,
@@ -328,14 +302,10 @@ def save_to_account() -> Any:
             provider="outlook",
         )
         if not success:
-            return build_error_response(
-                "INTERNAL_ERROR", "创建账号失败（邮箱可能已存在）", status=400
-            )
+            return build_error_response("INTERNAL_ERROR", "创建账号失败（邮箱可能已存在）", status=400)
 
         created = accounts_repo.get_account_by_email(email)
-        log_audit(
-            "create", "account", email, f"Token 工具新建 (client_id={client_id[:8]}...)"
-        )
+        log_audit("create", "account", email, f"Token 工具新建 (client_id={client_id[:8]}...)")
         return jsonify(
             {
                 "success": True,
@@ -348,9 +318,7 @@ def save_to_account() -> Any:
             }
         )
 
-    return build_error_response(
-        "OAUTH_CONFIG_INVALID", "mode 必须是 update 或 create", status=400
-    )
+    return build_error_response("OAUTH_CONFIG_INVALID", "mode 必须是 update 或 create", status=400)
 
 
 @login_required
@@ -399,22 +367,14 @@ def save_config() -> Any:
     tenant = (data.get("tenant") or COMPATIBLE_TENANT).strip() or COMPATIBLE_TENANT
     compatibility_error = _compatibility_mode_error(client_secret, tenant)
     if compatibility_error:
-        return build_error_response(
-            "OAUTH_CONFIG_INVALID", compatibility_error, status=400
-        )
+        return build_error_response("OAUTH_CONFIG_INVALID", compatibility_error, status=400)
 
-    settings_repo.set_setting(
-        "oauth_tool_client_id", (data.get("client_id") or "").strip()
-    )
+    settings_repo.set_setting("oauth_tool_client_id", (data.get("client_id") or "").strip())
     settings_repo.set_setting("oauth_tool_client_secret", "")
-    settings_repo.set_setting(
-        "oauth_tool_redirect_uri", (data.get("redirect_uri") or "").strip()
-    )
+    settings_repo.set_setting("oauth_tool_redirect_uri", (data.get("redirect_uri") or "").strip())
     settings_repo.set_setting("oauth_tool_scope", (data.get("scope") or "").strip())
     settings_repo.set_setting("oauth_tool_tenant", COMPATIBLE_TENANT)
-    settings_repo.set_setting(
-        "oauth_tool_prompt_consent", "true" if data.get("prompt_consent") else "false"
-    )
+    settings_repo.set_setting("oauth_tool_prompt_consent", "true" if data.get("prompt_consent") else "false")
 
     log_audit("update", "oauth_tool_config", "settings", "保存 OAuth 工具配置")
     return jsonify({"success": True, "message": "配置已保存"})

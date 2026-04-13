@@ -8,6 +8,30 @@
 
 ### 操作记录
 
+#### 35. 修复 v1.16.0 发布后的 CI 格式化门禁
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 按 CI 失败日志执行格式化修复
+   - 运行：`python -m black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+   - 结果：8 个文件被格式化（与 GitHub Actions 报告一致）
+   - 运行：`python -m isort --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+
+2. 本地质量门禁复核
+   - `python -m black --check ...` ✅
+   - `python -m isort --check-only --profile black ...` ✅
+
+3. 回归测试
+   - `python -m pytest tests/ -q` → `1109 passed, 9 skipped` ✅
+
+4. 处理目标
+   - 消除 `Code Quality` 的 `black --check` 失败根因
+   - 解除 `Build and Push Docker Image` 因 quality-gate 阻断的问题
+
+---
+
 #### 34. v1.16.0 发布后 CI/CD 状态核对
 
 **时间**：2026-04-13

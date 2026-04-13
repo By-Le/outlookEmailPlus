@@ -44,11 +44,7 @@ def _prune_expired() -> None:
     权衡: 避免额外线程复杂度,OAUTH_FLOW_STORE 条目量极小 (用户交互式操作)
     """
     now = time.time()
-    expired = [
-        k
-        for k, v in OAUTH_FLOW_STORE.items()
-        if now - v.get("created_at", 0) > OAUTH_FLOW_TTL
-    ]
+    expired = [k for k, v in OAUTH_FLOW_STORE.items() if now - v.get("created_at", 0) > OAUTH_FLOW_TTL]
     for k in expired:
         del OAUTH_FLOW_STORE[k]
     if expired:
@@ -133,9 +129,7 @@ def start_oauth_flow(oauth_config: Dict[str, Any]) -> Tuple[Optional[str], str]:
     return authorize_url, state
 
 
-def exchange_code_for_tokens(
-    code: str, oauth_config: Dict[str, Any], verifier: str
-) -> Tuple[Optional[Dict[str, Any]], Any]:
+def exchange_code_for_tokens(code: str, oauth_config: Dict[str, Any], verifier: str) -> Tuple[Optional[Dict[str, Any]], Any]:
     """
     用授权码换取 token
 
@@ -171,9 +165,7 @@ def exchange_code_for_tokens(
 
     tokens = resp.json()
     result = _extract_token_data(tokens, oauth_config)
-    logger.info(
-        "[oauth_tool] Token 换取成功 (client_id=%s...)", oauth_config["client_id"][:8]
-    )
+    logger.info("[oauth_tool] Token 换取成功 (client_id=%s...)", oauth_config["client_id"][:8])
     return result, None
 
 
