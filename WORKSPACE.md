@@ -144,6 +144,39 @@
 4. 现场状态
    - 本次以状态核对和文档回填为主，无新增业务实现。
 
+#### 72. 双仓 Docker 镜像构建状态核对（GHCR + DockerHub）
+
+**时间**：2026-04-15
+
+**本次操作**：
+
+1. 核对目标
+   - GHCR：`ghcr.io/zeropointsix/outlook-email-plus`
+   - DockerHub：`docker.io/guangshanshui/outlook-email-plus`
+
+2. 核对结果（`docker buildx imagetools inspect`）
+   - `main` 标签：
+     - GHCR digest：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+     - DockerHub digest：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+     - 结论：一致 ✅
+   - `latest` 标签：
+     - GHCR digest：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+     - DockerHub digest：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+     - 结论：一致 ✅
+   - `v1.17.0` 标签：
+     - GHCR：`not found`
+     - DockerHub：`not found`
+     - 结论：版本标签镜像当前未生成。
+
+3. 监控补充
+   - 当前文档提交触发的 SonarCloud（run `24451514245`）在记录时仍为 `in_progress`。
+
+4. 文档回填
+   - 已同步更新：FD/TD/TDD/TODO/联调检查文档至最新版本号与镜像核对结论。
+
+5. 现场状态
+   - 本次仅进行镜像状态核对与文档记录，不涉及业务代码变更。
+
 #### 66. v1.17.0 发布执行（单提交策略）与 CI/CD 实时结果回填
 
 **时间**：2026-04-15

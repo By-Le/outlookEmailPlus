@@ -1,8 +1,8 @@
 # FD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.8
+- 文档版本: v1.9
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.8 — 回填 v1.17.0 发布状态与监控收口）
+- 更新日期: 2026-04-15（v1.9 — 回填双仓镜像构建状态核对）
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`
 - 关联 TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`
@@ -292,6 +292,17 @@
 - 发布页：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
 - 发布时间：`2026-04-15T10:29:25Z`
 - 本轮会话对发布后修复链路的监控已收口：`Code Quality / Python Tests / Build and Push Docker Image / SonarCloud Scan` 均在修复提交链路达到 success。
+
+会话进展回填（2026-04-15，双仓 Docker 镜像状态核对）：
+
+- 已核对仓库：
+  - GHCR：`ghcr.io/zeropointsix/outlook-email-plus`
+  - DockerHub：`docker.io/guangshanshui/outlook-email-plus`
+- `main` 标签：两仓均存在，且 digest 一致：
+  - `sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+- `latest` 标签：两仓均存在，且 digest 一致：
+  - `sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+- `v1.17.0` 标签：两仓当前均不存在（tag 推送当时 workflow 失败导致未产出版本标签镜像）。
 
 ---
 

@@ -1,8 +1,8 @@
 # TDD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.7
+- 文档版本: v1.8
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.7 — 回填 v1.17.0 发布确认与监控收口）
+- 更新日期: 2026-04-15（v1.8 — 回填双仓镜像标签可用性核对）
 - 文档类型: 测试设计文档（TDD）
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -378,3 +378,12 @@ python -m unittest discover -s tests -v
 - 发布后修复链路（提交 `f3d2208`）已验证四项主工作流全绿：
   - `Code Quality` / `Python Tests` / `Build and Push Docker Image` / `SonarCloud Scan` 均为 success。
 - 会话监控收口提交（`05871bf`）触发的 `SonarCloud Scan` 亦为 success，说明当前主干状态稳定。
+
+### 13.12 双仓镜像标签可用性核对（2026-04-15）
+
+- 核对命令：`docker buildx imagetools inspect`（GHCR 与 DockerHub 双仓）。
+- 结果：
+  - `main`：两仓均存在，digest 一致（`sha256:8aef74...9218`）；
+  - `latest`：两仓均存在，digest 一致（`sha256:8aef74...9218`）；
+  - `v1.17.0`：两仓均 `not found`。
+- 结论：双仓主线镜像同步正常，版本标签镜像仍待补齐。

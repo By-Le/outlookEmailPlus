@@ -3,9 +3,9 @@
 > 检查日期：2026-04-14  
 > 对照文档：
 > - PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（v1.5，路径待补）
-> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.8）
-> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.8）
-> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.7）
+> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.9）
+> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.9）
+> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.8）
 
 ---
 
@@ -145,6 +145,12 @@
 - 发布链接：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
 - 修复提交 `f3d2208` 对应主链路工作流已全绿（Code Quality / Python Tests / Build and Push Docker Image / SonarCloud）。
 - 监控收口提交 `05871bf` 触发的 SonarCloud（run `24450875717`）同样为 success。
+
+### 4.11 双仓镜像状态核对（2026-04-15）
+
+- GHCR 与 DockerHub 的 `main`/`latest` 均存在，且 digest 一致：
+  - `sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+- `v1.17.0` 标签在两仓均 `not found`，确认版本标签镜像尚未补齐。
 
 ---
 

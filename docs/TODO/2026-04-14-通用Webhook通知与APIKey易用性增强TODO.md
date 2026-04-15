@@ -1,11 +1,11 @@
 # TODO: 通用 Webhook 通知与 API Key 易用性增强
 
 > 创建日期：2026-04-14  
-> 更新日期：2026-04-15（v1.10 — 回填 v1.17.0 发布确认与监控收口）  
+> 更新日期：2026-04-15（v1.11 — 回填双仓镜像状态核对结果）  
 > 基于 PRD v1.5：`docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）  
-> 基于 FD v1.8：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
-> 基于 TD v1.8：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
-> 基于 TDD v1.7：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
+> 基于 FD v1.9：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
+> 基于 TD v1.9：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
+> 基于 TDD v1.8：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
 > 联调检查：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强-PRD-FD-TD-TDD联调检查.md`  
 > AI 执行提示词：按会话实时提供（不落库文档）  
 > 目标版本：v1.17.x（待排期）
@@ -130,6 +130,13 @@
   - `Build and Push Docker Image` ✅
   - `SonarCloud Scan` ✅
 - 文档收口提交链路（`05871bf`）附加监控：`SonarCloud Scan`（run `24450875717`）✅
+
+### 本次执行回填（2026-04-15，双仓镜像核对）
+
+- 核对仓库：GHCR + DockerHub。
+- `main`：两仓存在且 digest 一致：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`。
+- `latest`：两仓存在且 digest 一致：`sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`。
+- `v1.17.0`：两仓当前均不存在（not found），与 tag 工作流初次失败事实一致。
 
 ---
 

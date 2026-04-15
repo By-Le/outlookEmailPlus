@@ -1,8 +1,8 @@
 # TD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.8
+- 文档版本: v1.9
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.8 — 回填 v1.17.0 发布状态核对与监控收口）
+- 更新日期: 2026-04-15（v1.9 — 回填双仓镜像 digest 核对）
 - 文档类型: 技术细节设计
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -583,3 +583,15 @@ const key = Array.from(bytes, b => ALPHABET[b % ALPHABET.length]).join('');
    - `SonarCloud Scan` ✅
 3. 额外监控收口：
    - 文档收口提交 `05871bf` 触发的新一轮 `SonarCloud Scan`（run `24450875717`）已完成 `success`。
+
+### 10.8 双仓镜像构建状态核对（2026-04-15）
+
+1. 核对目标仓库：
+   - GHCR：`ghcr.io/zeropointsix/outlook-email-plus`
+   - DockerHub：`docker.io/guangshanshui/outlook-email-plus`
+2. `main` 与 `latest` 标签：
+   - 两仓均可拉取 manifest，且 index digest 一致：
+     - `sha256:8aef74b93a816e3aa8020d1c20767715a5c51e1373f8c8f58f5d692092869218`
+3. `v1.17.0` 标签：
+   - 两仓查询结果均 `not found`；
+   - 与历史状态一致：tag 流水线初次失败导致版本标签镜像未生成。
