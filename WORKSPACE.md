@@ -168,6 +168,28 @@
    - 关键阻塞点（formatter gate）已在新一轮 `Code Quality` 中确认修复。
    - 其余工作流仍在运行，需继续跟踪到全部完成后再判定“全绿”。
 
+#### 160. CI 收口结果：主线工作流已恢复全绿
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 继续拉取最新 Actions 状态
+   - 命令：`gh run list --limit 20 ...`
+
+2. head=`7634d4b`（格式化修复提交）结果
+   - `Code Quality`：`success`（run `24552187351`）
+   - `Python Tests`：`success`（run `24552187349`）
+   - `Build and Push Docker Image`：`success`（run `24552187340`）
+   - `SonarCloud Scan`：`success`（run `24552187327`）
+
+3. 最新提交（文档同步）状态
+   - `docs: record formatter fix and ci retrigger status`（`baa0105`）对应 `SonarCloud Scan`：`success`（run `24552240216`）
+
+4. 结论
+   - 本轮 `v1.19.0` 发布后的 CI 阻塞（formatter gate）已被修复并验证。
+   - 当前主线关键工作流已恢复全绿。
+
 #### 154. 人工验收结论回填：本轮本地 Docker 验收通过
 
 **时间**：2026-04-17
