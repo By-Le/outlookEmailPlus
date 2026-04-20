@@ -844,6 +844,9 @@
 - 也就是说，当前 `main` 已包含：
   - `ec6adbf` `feat: 完成数据概览大盘与插件联调收口`
   - `a4afc61` `docs: 记录合并 main 与测试结果`
+- 主工作树当前仍有一个未跟踪文件：`browser-extension.zip`
+  - 本次未修改它
+  - 它没有阻止本次 `main <- dev` 的 fast-forward
 
 ---
 
