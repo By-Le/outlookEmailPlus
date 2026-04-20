@@ -815,6 +815,36 @@
 - `main -> dev` 合并已确认无需额外 merge commit
 - 全量测试通过
 
+#### 196. main 工作树合并 dev — 受 worktree 约束，改在主工作树快进完成
+
+**时间**：2026-04-20
+
+**本次背景**：
+
+- 在 `dev` 完成提交、同步 `main -> dev`、并确认全量测试通过后，用户要求继续把当前内容真正合到 `main`
+
+**实际处理过程**：
+
+1. 先尝试在当前 `dev` 工作树内执行：
+   - `git switch main && git merge --ff-only dev`
+2. 结果失败，原因不是冲突，而是 **git worktree 限制**：
+   - `main` 已经在另一个工作树 `E:\\hushaokang\\Data-code\\outlookEmail` 被检出
+3. 读取 `git worktree list --porcelain` 后，确认：
+   - 当前会话工作树：`...\\EnsoAi\\outlookEmail\\dev`（分支 `dev`）
+   - 主工作树：`E:\\hushaokang\\Data-code\\outlookEmail`（分支 `main`）
+4. 随后直接在 `main` 工作树里执行：
+   - `git -C "E:\\hushaokang\\Data-code\\outlookEmail" merge --ff-only dev`
+5. 合并结果：
+   - `Updating a82c61e..a4afc61`
+   - `Fast-forward`
+
+**结果**：
+
+- `main` 已成功快进到 `a4afc61`
+- 也就是说，当前 `main` 已包含：
+  - `ec6adbf` `feat: 完成数据概览大盘与插件联调收口`
+  - `a4afc61` `docs: 记录合并 main 与测试结果`
+
 ---
 
 ## 2026-04-18
