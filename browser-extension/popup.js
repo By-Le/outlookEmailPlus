@@ -5,6 +5,11 @@
   const MAX_HISTORY = 100;
   const CALLER_ID = 'browser-extension';
   const DEFAULT_PROFILE_PASSWORD_LENGTH = 16;
+  const StorageApi = window.ExtensionStorage;
+
+  if (!StorageApi) {
+    throw new Error('ExtensionStorage is not loaded');
+  }
 
   let historyOpen = false;
   let activePage = 'mail';
@@ -119,7 +124,7 @@
     }
 
     if (page === 'profile') {
-      const { currentTask } = await Storage.getAll();
+      const { currentTask } = await StorageApi.getAll();
       refreshClaimedEmailState(currentTask);
     }
   }
@@ -204,7 +209,7 @@
   }
 
   async function loadSettingsForm() {
-    const config = await Storage.getConfig();
+    const config = await StorageApi.getConfig();
     getEl('cfg-server').value = config.serverUrl || '';
     getEl('cfg-apikey').value = config.apiKey || '';
     getEl('cfg-project').value = config.defaultProjectKey || '';
@@ -564,7 +569,7 @@
 
   async function handleClaim() {
     await setActivePage('mail');
-    const config = await Storage.getConfig();
+    const config = await StorageApi.getConfig();
     if (!config.serverUrl || !config.apiKey) {
       showError('请先在设置中配置服务端地址和 API Key');
       return;
@@ -584,7 +589,7 @@
       link: null,
     };
 
-    await Storage.setCurrentTask(task);
+    await StorageApi.setCurrentTask(task);
 
     try {
       const result = await apiClaimRandom(config, taskId, projectKey);
@@ -598,11 +603,11 @@
       task.email = data.email;
       task.accountId = data.account_id;
       task.claimToken = data.claim_token;
-      await Storage.setCurrentTask(task);
+      await StorageApi.setCurrentTask(task);
       refreshClaimedEmailState(task);
       await renderMailboxState('claimed', task);
     } catch (err) {
-      await Storage.clearCurrentTask();
+      await StorageApi.clearCurrentTask();
       refreshClaimedEmailState(null);
       await renderMailboxState('idle');
       showError(friendlyError(err));
@@ -611,8 +616,8 @@
 
   async function handleGetCode() {
     await setActivePage('mail');
-    const { currentTask } = await Storage.getAll();
-    const config = await Storage.getConfig();
+    const { currentTask } = await StorageApi.getAll();
+    const config = await StorageApi.getConfig();
     if (!currentTask || !currentTask.email) {
       await renderMailboxState('idle');
       showError('当前没有进行中的任务');
@@ -627,7 +632,7 @@
         throw new Error('未获取到验证码');
       }
       currentTask.code = result.data.verification_code;
-      await Storage.setCurrentTask(currentTask);
+      await StorageApi.setCurrentTask(currentTask);
       await renderMailboxState('result_code', currentTask);
     } catch (err) {
       await renderMailboxState('claimed', currentTask);
@@ -637,8 +642,8 @@
 
   async function handleGetLink() {
     await setActivePage('mail');
-    const { currentTask } = await Storage.getAll();
-    const config = await Storage.getConfig();
+    const { currentTask } = await StorageApi.getAll();
+    const config = await StorageApi.getConfig();
     if (!currentTask || !currentTask.email) {
       await renderMailboxState('idle');
       showError('当前没有进行中的任务');
@@ -653,7 +658,7 @@
         throw new Error('未获取到验证链接');
       }
       currentTask.link = result.data.verification_link;
-      await Storage.setCurrentTask(currentTask);
+      await StorageApi.setCurrentTask(currentTask);
       await renderMailboxState('result_link', currentTask);
     } catch (err) {
       await renderMailboxState('claimed', currentTask);
@@ -662,9 +667,9 @@
   }
 
   async function finalizeTask(currentTask, entry) {
-    await Storage.appendHistory(entry);
-    await Storage.clearCurrentTask();
-    const { history = [] } = await Storage.getAll();
+    await StorageApi.appendHistory(entry);
+    await StorageApi.clearCurrentTask();
+    const { history = [] } = await StorageApi.getAll();
     renderHistory(history.slice(0, MAX_HISTORY));
     refreshClaimedEmailState(null);
     await renderMailboxState('idle');
@@ -672,8 +677,8 @@
 
   async function handleComplete() {
     await setActivePage('mail');
-    const { currentTask } = await Storage.getAll();
-    const config = await Storage.getConfig();
+    const { currentTask } = await StorageApi.getAll();
+    const config = await StorageApi.getConfig();
     if (!currentTask || !currentTask.taskId) {
       await renderMailboxState('idle');
       return;
@@ -708,8 +713,8 @@
 
   async function handleRelease() {
     await setActivePage('mail');
-    const { currentTask } = await Storage.getAll();
-    const config = await Storage.getConfig();
+    const { currentTask } = await StorageApi.getAll();
+    const config = await StorageApi.getConfig();
     if (!currentTask || !currentTask.taskId) {
       await renderMailboxState('idle');
       return;
@@ -744,7 +749,7 @@
 
   async function handleGenerateProfile() {
     await setActivePage('profile');
-    const { currentTask } = await Storage.getAll();
+    const { currentTask } = await StorageApi.getAll();
     const useClaimedEmail = getEl('profile-use-claimed-email').checked && currentTask && currentTask.email;
     const profile = ProfileGenerator.generateProfile({
       claimedEmail: useClaimedEmail ? currentTask.email : '',
@@ -752,7 +757,7 @@
     });
 
     renderProfileForm(profile);
-    await Storage.setLastGeneratedProfile(profile);
+    await StorageApi.setLastGeneratedProfile(profile);
     showMessage('已生成一组美国资料', 'success');
   }
 
@@ -761,7 +766,7 @@
     const profile = buildProfileFromForm();
     profile.password = ProfileGenerator.generatePassword(getPasswordLength());
     renderProfileForm(profile);
-    await Storage.setLastGeneratedProfile(profile);
+    await StorageApi.setLastGeneratedProfile(profile);
     showMessage('随机密码已刷新', 'success');
   }
 
@@ -772,8 +777,8 @@
       showError('请先生成或填写资料后再保存');
       return;
     }
-    const nextProfiles = await Storage.upsertSavedProfile(profile);
-    await Storage.setLastGeneratedProfile(profile);
+    const nextProfiles = await StorageApi.upsertSavedProfile(profile);
+    await StorageApi.setLastGeneratedProfile(profile);
     renderSavedProfiles(nextProfiles);
     showMessage('资料已保存', 'success');
   }
@@ -782,7 +787,7 @@
     await setActivePage('profile');
     const blankProfile = ProfileGenerator.createBlankProfile();
     renderProfileForm(blankProfile);
-    await Storage.setLastGeneratedProfile(blankProfile);
+    await StorageApi.setLastGeneratedProfile(blankProfile);
     showMessage('已清空当前编辑内容', 'success');
   }
 
@@ -794,21 +799,21 @@
     if (!profileId) return;
 
     if (button.dataset.action === 'load') {
-      const savedProfiles = await Storage.getSavedProfiles();
+      const savedProfiles = await StorageApi.getSavedProfiles();
       const profile = savedProfiles.find((item) => item.id === profileId);
       if (!profile) {
         showError('未找到要加载的资料');
         return;
       }
       renderProfileForm(profile);
-      await Storage.setLastGeneratedProfile(profile);
+      await StorageApi.setLastGeneratedProfile(profile);
       await setActivePage('profile');
       showMessage('资料已载入', 'success');
       return;
     }
 
     if (button.dataset.action === 'delete') {
-      const nextProfiles = await Storage.deleteSavedProfile(profileId);
+      const nextProfiles = await StorageApi.deleteSavedProfile(profileId);
       renderSavedProfiles(nextProfiles);
       showMessage('资料已删除', 'success');
     }
@@ -837,7 +842,7 @@
       return;
     }
 
-    await Storage.setConfig({
+    await StorageApi.setConfig({
       serverUrl,
       apiKey,
       defaultProjectKey: defaultProjectKey || '',
@@ -886,7 +891,7 @@
     getEl('btn-reset-profile').addEventListener('click', handleResetProfile);
     getEl('saved-profiles-list').addEventListener('click', handleSavedProfileAction);
 
-    const allData = await Storage.getAll();
+    const allData = await StorageApi.getAll();
     const currentTask = allData.currentTask;
     renderHistory((allData.history || []).slice(0, MAX_HISTORY));
     renderSavedProfiles(allData.savedProfiles || []);
@@ -901,7 +906,7 @@
     if (currentTask && currentTask.email) {
       await renderMailboxState('claimed', currentTask);
     } else if (currentTask && !currentTask.email) {
-      await Storage.clearCurrentTask();
+      await StorageApi.clearCurrentTask();
       await renderMailboxState('idle');
     } else {
       await renderMailboxState('idle');

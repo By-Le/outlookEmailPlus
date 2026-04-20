@@ -36,6 +36,8 @@ window.__emailInlineImageTestApi = {
     global.formatDate = (value) => String(value ?? '');
     global.adjustIframeHeight = jest.fn();
     global.isTrustedMode = false;
+    global.isTempEmailGroup = false;
+    global.currentPage = 'mailbox';
     global.DOMPurify = {
       sanitize: jest.fn((html) => html)
     };
@@ -44,6 +46,8 @@ window.__emailInlineImageTestApi = {
     window.formatDate = global.formatDate;
     window.adjustIframeHeight = global.adjustIframeHeight;
     window.isTrustedMode = global.isTrustedMode;
+    window.isTempEmailGroup = global.isTempEmailGroup;
+    window.currentPage = global.currentPage;
     window.DOMPurify = global.DOMPurify;
   });
 

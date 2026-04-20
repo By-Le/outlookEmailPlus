@@ -1,8 +1,8 @@
 /**
  * chrome.storage.local 封装
- * 通过 <script src="storage.js"> 引入，暴露全局 Storage 对象
+ * 通过 <script src="storage.js"> 引入，暴露全局 ExtensionStorage 对象
  */
-const Storage = {
+const ExtensionStorage = {
   /**
    * 读取所有存储数据
  * @returns {Promise<{config?: object, currentTask?: object|null, history?: Array, lastGeneratedProfile?: object|null, savedProfiles?: Array}>}
@@ -109,3 +109,5 @@ const Storage = {
     return next;
   },
 };
+
+window.ExtensionStorage = ExtensionStorage;
