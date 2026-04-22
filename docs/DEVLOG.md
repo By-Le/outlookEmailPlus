@@ -1,5 +1,44 @@
 # DEVLOG
 
+## v2.2.0 - 临时邮箱 Provider 插件化与浏览器扩展增强
+
+发布日期：2026-04-22
+
+### 新增功能
+
+- **临时邮箱 Provider 插件化架构**：全新插件系统支持第三方临时邮箱 Provider 动态安装、卸载、配置与热加载。
+  - 核心模块：`temp_mail_registry`（全局注册表）、`temp_mail_plugin_manager`（生命周期管理）、`temp_mail_plugin_cli`（CLI 工具）、`plugins/registry.json`（源索引）。
+  - 内置 Provider：Cloudflare Workers（多域 + Admin Key 加密）、Custom API、GPTMail、Moemail。
+  - Web 管理 API：`/api/plugins`（列表/安装/卸载/配置/连接测试）。
+  - 设置页新增插件管理卡片，支持自定义安装模态框与 Provider 注入逻辑。
+  - Provider 设置与域名选择解耦：设置页不再硬编码 Provider 名称，改为动态从注册表获取。
+- **浏览器扩展 v0.3.0 增强**：
+  - 新增本地个人信息生成器（`profile-generator.js` + `profile-data-us.js`），支持一键生成姓名/地址/电话等注册所需字段。
+  - 新增完整 Jest 测试覆盖（popup、storage、profile-generator 的单元与集成测试）。
+- **登录鉴权增强**：`login_required` 装饰器现同时支持 `session["logged_in"]` 与 `session["user_id"]`，提升多场景兼容性与安全性。
+
+### 修复
+
+- **发布质量门禁修复**：对新增插件化模块及既有文件执行 `black` / `isort` 对齐，修复 `Code Quality` / `Build and Push Docker Image` 链路被质量门禁阻断的问题；本地复测确认 `Code Quality` 等效命令已全部通过。
+- **版本测试动态化**：`tests/test_version_update.py` 改为跟随 `outlook_web.__version__` 动态断言，避免仅因版本号 bump 导致全量回归误报。
+
+### 重要变更
+
+- **版本升级**：`outlook_web.__version__` 从 `2.1.0` 升级为 `2.2.0`。
+- **扩展版本同步**：`browser-extension/manifest.json` 从 `0.2.0` 升级为 `0.3.0`。
+- **发布口径保持不变**：继续采用 **Python + Docker** 发布链路。
+
+### 测试/验证
+
+- 全量回归：`1,369 passed, 9 skipped, 0 failed` ✅
+- 构建验证：`docker build -t outlook-email-plus:v2.2.0 .` → 成功
+- 产物：
+  - `dist/outlook-email-plus-v2.2.0-docker.tar`
+  - `dist/outlookEmailPlus-v2.2.0-src.zip`
+  - `dist/browser-extension-v0.3.0.zip`
+
+---
+
 ## v2.1.0 - 数据概览大盘与提取链路观测增强
 
 发布日期：2026-04-20

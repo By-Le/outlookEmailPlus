@@ -6,10 +6,10 @@
 测试通过直接操作 outlook_web.temp_mail_registry._REGISTRY 注入/清理测试数据，
 每个测试前后确保注册表状态干净。
 """
+
 from __future__ import annotations
 
 import pytest
-
 
 # ── Fixtures ──────────────────────────────────────────────
 

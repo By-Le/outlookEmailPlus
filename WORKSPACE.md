@@ -43,6 +43,34 @@
 
 ---
 
+#### 228. 文档同步与本地提交
+
+**时间**：2026-04-22
+
+**背景**：
+用户要求将本地修改进行提交，并根据实际测试结果修改相关文档，操作及时记录到 WORKSPACE。
+
+**文档修改**：
+1. `docs/DEVLOG.md`
+   - 在 v2.1.0「测试/验证」小节追加 2026-04-22 复测结果
+   - 记录 batched pytest 方法、新增测试文件、以及 `1,369 passed / 9 skipped / 0 failed` 基线
+2. `WORKSPACE.md`
+   - 已在本条目上方记录 #227 全量验证详情
+
+**提交内容**：
+- 新增 `tests/test_auth_user_id_login.py`（login_required user_id 场景验证，80 行）
+- 新增 `tests/test_settings_dynamic_provider_names.py`（动态 provider 名称注册表验证，175 行）
+- 更新 `docs/DEVLOG.md` 回归基线
+- 更新 `WORKSPACE.md` 操作日志
+- 同步 `tests/layout-system/coverage/*` 路径与时间戳（5 个文件）
+
+**提交记录**：
+- Commit：`a01fe81`
+- Message：`test: 补充 user_id 登录与 provider 名称单元测试，同步回归基线与文档`
+- 分支状态：`main` 领先 `origin/main` 共 10 个提交（含本次）
+
+---
+
 ## 2026-04-21
 
 ### 操作记录
