@@ -29,6 +29,11 @@
   - `python -m unittest discover -s tests -v`
   - 结果：`Ran 1243 tests in 302.912s`
   - 状态：`OK (skipped=7)`
+- 2026-04-22 本地复测（batched pytest）：
+  - 方法：123 个测试文件拆 7 批并行执行
+  - 结果：`1,369 passed, 9 skipped, 0 failed`
+  - 新增纳入：`tests/test_auth_user_id_login.py`、`tests/test_settings_dynamic_provider_names.py`
+  - 状态：全绿 ✅
 - 构建验证：
   - `docker build -t outlook-email-plus:v2.1.0 .` → 成功
   - 产物：
