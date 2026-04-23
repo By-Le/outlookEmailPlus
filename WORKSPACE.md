@@ -207,6 +207,26 @@
 
 ---
 
+#### 236. 删除已完成的分支
+
+**时间**：2026-04-23
+
+**操作背景**：
+用户要求删除已完成合并的 `alias-email-merge` 和 `pr-48-personal-information` 分支。
+
+**执行结果**：
+
+| 分支 | 本地删除 | 远程删除 |
+|---|---|---|
+| `alias-email-merge` | ✅ | ✅ |
+| `pr-48-personal-information` | ✅ | ✅ |
+
+**当前剩余分支**：
+- 主仓库：`main`
+- Worktree：`Buggithubissue`、`dev`、`feature`
+
+---
+
 ## 2026-04-22
 
 ### 操作记录
